@@ -1,7 +1,21 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
+.pytest_cache/
+
+# Basura de SO
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Editores / IDEs
+.vscode/
+.idea/
+
+# Datos en runtime: se generan dentro de los volumenes, no se versionan
 data/*
 !data/.gitkeep
 pdfs/*
