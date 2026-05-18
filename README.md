@@ -1,6 +1,6 @@
 # arxiv-digest
 
-Sistema **determinístico** (sin LLMs) que envía un digest diario de papers nuevos
+Sistema que envía un digest diario de papers nuevos
 de [arXiv](https://arxiv.org) a un buzón de correo. Respondes el email con los
 números de los papers que te interesan y el sistema te devuelve esos PDFs como
 adjuntos. Todo corre en contenedores con `docker compose`.
