@@ -1,0 +1,20 @@
+=== arXiv Digest - {{ date }} ===
+
+{{ papers|length }} papers nuevos. Filtro: {{ category }} + keywords/autores
+configurados en filters.yml.
+
+Para descargar PDFs, responde con los numeros (ej: 1 3 7).
+{% for p in papers %}
+
+{{ "%2d"|format(loop.index) }}. {{ p.title }}
+    {{ p.authors|join(', ')|truncate(60) }} (matched: {{ p.match_reason }})
+    arxiv.org/abs/{{ p.arxiv_id }}
+
+{{ p.abstract|wrap_abstract }}
+{% endfor %}
+{% if omitted %}
+
+(+ {{ omitted }} papers omitidos. Edita filters.yml para refinar.)
+{% endif %}
+
+---  fin del digest, responde con los numeros  ---

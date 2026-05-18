@@ -1,0 +1,56 @@
+services:
+  digest:
+    build: ./digest
+    container_name: arxiv-digest
+    restart: unless-stopped
+    depends_on:
+      - mailhog
+    environment:
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      RECIPIENT: fer@local
+      DIGEST_HOUR: "07:00"
+      RUN_NOW: "0"
+      TZ: America/Lima
+    volumes:
+      - ./filters.yml:/app/filters.yml:ro
+      - ./data:/app/data
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+
+  listener:
+    build: ./listener
+    container_name: arxiv-listener
+    restart: unless-stopped
+    depends_on:
+      - mailhog
+    environment:
+      MAILHOG_API: http://mailhog:8025/api/v2/messages
+      MAILHOG_DELETE_API: http://mailhog:8025/api/v1/messages
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      RECIPIENT: fer@local
+      POLL_INTERVAL_S: "30"
+      TZ: America/Lima
+    volumes:
+      - ./data:/app/data
+      - ./pdfs:/app/pdfs
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: arxiv-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge

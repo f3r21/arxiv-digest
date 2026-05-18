@@ -1,0 +1,19 @@
+# Categoria de arxiv a consultar. Catalogo: https://arxiv.org/category_taxonomy
+category: cs.DC
+
+# Maximo papers en el digest (cap aplicado tras filtrar).
+max_papers: 15
+
+# Para que un paper aparezca debe matchear al menos un keyword O un autor.
+keywords:
+  - kubernetes
+  - autoscaling
+  - cold start
+  - cold-start
+  - serverless
+  - microservice
+  - container
+
+authors:
+  - "Pavlou T"
+  - "Liu Y"
