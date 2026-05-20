@@ -29,7 +29,10 @@ if [ -z "$DOCKERHUB_USER" ]; then
 fi
 
 # --- Verificar docker login ---
-if ! docker info 2>/dev/null | grep -q "Username:"; then
+# Docker Desktop en Mac guarda creds en el keychain (credsStore), no en
+# `docker info`. Chequeamos config.json en su lugar (cubre ambos casos).
+if [ ! -f "$HOME/.docker/config.json" ] || \
+   ! grep -qE '"auths"|"credsStore"|"credHelpers"' "$HOME/.docker/config.json"; then
     echo "WARN: no se detecta sesion de docker login."
     echo "      Correr: docker login -u $DOCKERHUB_USER"
     read -p "Continuar igual? (push fallara si no estas logueado) [y/N] " ans
