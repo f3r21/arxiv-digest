@@ -1,44 +1,53 @@
 # Deploy a Oracle Cloud Free Tier
 
-Guía paso a paso para poner arxiv-digest en producción **gratis**: VM ARM
-Ampere (4 OCPU / 24 GB RAM) + subdominio gratis con DNS completo (FreeDNS) +
-Resend con dominio verificado (DKIM/SPF/DMARC).
+Guía paso a paso para poner arxiv-digest en producción **gratis**: VM AMD
+E2.1.Micro (1 GB RAM) + subdominio gratis con DNS completo (FreeDNS) +
+Resend con dominio verificado (DKIM/SPF/DMARC) + imágenes pre-built en
+Docker Hub.
+
+**Por qué E2.1.Micro y no A1.Flex (4 OCPU / 24 GB):** A1.Flex está saturado
+en la mayoría de regiones (`Out of capacity`) y multi-region requiere
+upgrade a PAYG. E2.1.Micro siempre tiene capacidad. Medido localmente el
+stack idle = 155 MB de RAM, cabe holgado en 1 GB.
 
 Tiempo estimado: **60-90 min** la primera vez, mayormente esperas (verificación
 de dominio, propagación DNS).
 
 ## Pre-requisitos
 
-Vas a necesitar crearte cuenta en (las tres son gratis):
+Cuentas (las cuatro gratis):
 
 1. **Oracle Cloud** — `cloud.oracle.com`. Pide tarjeta de crédito para
    verificar identidad (no te cobra si te quedás en Always Free).
-2. **FreeDNS** — `freedns.afraid.org`. Solo email.
-3. **Resend** — `resend.com`. Plan gratis: 100 emails/día, 3000/mes.
+2. **Docker Hub** — `hub.docker.com`. Repos públicos ilimitados gratis.
+3. **FreeDNS** — `freedns.afraid.org`. Solo email.
+4. **Resend** — `resend.com`. Plan gratis: 100 emails/día, 3000/mes.
 
 Y en tu laptop:
 - Un par de claves SSH (`ssh-keygen -t ed25519` si no tenés).
-- `git` para subir el repo (o `rsync`).
+- Docker Desktop (para hacer el build local de las imágenes).
+- `git`.
 
 ---
 
 ## 1. Crear VM en Oracle Cloud (~15 min)
 
-1. Login → región **siempre free tier** (Phoenix / Ashburn / cualquier que
-   ofrezca Ampere A1).
+1. Login → home region (Santiago / Bogotá / cualquiera disponible al firmar).
 2. Hamburguesa → **Compute → Instances → Create Instance**.
 3. Settings:
    - **Name**: `arxiv-digest`
    - **Image**: `Canonical Ubuntu 22.04` (default)
-   - **Shape**: clic en *Change Shape* → **Ampere** tab → `VM.Standard.A1.Flex`
-     → 4 OCPU / 24 GB (todo el always-free de una). Si no aparece, probá otra
-     región — Oracle tiene cuota global limitada.
+   - **Shape**: clic en *Change Shape* → tab **AMD** → `VM.Standard.E2.1.Micro`
+     (Always Free, 1/8 OCPU, 1 GB RAM). Sin sliders (shape fija). Capacidad
+     siempre disponible — sin `Out of capacity`.
    - **Networking**: dejá el VCN/subnet default. Asegurate que
-     "Assign a public IPv4 address" esté tildado.
+     "Automatically assign public IPv4 address" esté tildado. Si el toggle
+     no responde, crear VM sin IP pública y asignarla después desde
+     Instance details → Attached VNICs → IPv4 Addresses → Assign Public IP.
    - **SSH keys**: pegá tu `~/.ssh/id_ed25519.pub` (o la que uses).
-   - **Boot volume**: default (50 GB) es suficiente.
-4. **Create**. Cuando esté `Running`, anotá la **Public IP** (la vas a usar todo
-   el resto del doc — llamémosla `<IP>`).
+   - **Boot volume**: default (47 GB) es suficiente.
+4. **Create**. Cuando esté `Running`, anotá la **Public IP** (la vas a usar
+   todo el resto del doc — llamémosla `<IP>`).
 5. Abrir puertos 80 y 443:
    - Instance details → **Subnet** → **Default Security List** → **Add Ingress Rules**.
    - Source CIDR `0.0.0.0/0`, IP Protocol `TCP`, Destination Port Range `80,443`.
@@ -76,6 +85,39 @@ ssh ubuntu@<IP>
 docker version
 docker compose version
 ```
+
+---
+
+## 2.5. Build y push de imágenes a Docker Hub (~5 min, en TU LAPTOP)
+
+La VM E2.1.Micro tiene CPU muy limitada (1/8 OCPU) — buildear las imágenes
+Python ahí toma 10-15 min y rosa el límite de RAM. Mucho mejor build local
+y push a Docker Hub, la VM solo hace pull (1-3 min).
+
+**En tu laptop** (no en la VM):
+
+```bash
+# Una sola vez: login en Docker Hub
+docker login
+# Username: tu username de hub.docker.com
+# Password: usá un Personal Access Token, no tu password de la cuenta:
+#   hub.docker.com → Account Settings → Security → New Access Token
+#   permisos: Read, Write, Delete
+
+# Cada vez que cambies código:
+cd ~/path/to/arxiv-digest
+DOCKERHUB_USER=tu-username ./tools/build_and_push.sh
+```
+
+El script construye las 4 imágenes con `--platform linux/amd64` (importa si
+tu laptop es Mac M1/M2/M3, la VM es AMD) y las pushea a:
+
+- `hub.docker.com/r/tu-username/arxiv-digest-subscriptions`
+- `hub.docker.com/r/tu-username/arxiv-digest-digest`
+- `hub.docker.com/r/tu-username/arxiv-digest-listener`
+- `hub.docker.com/r/tu-username/arxiv-digest-translator`
+
+Verificá en `hub.docker.com` que aparezcan los 4 repos públicos.
 
 ---
 
@@ -164,6 +206,8 @@ nano .env.prod
 Rellenar mínimo:
 
 ```env
+DOCKERHUB_USER=tu-username        # el mismo que usaste en build_and_push.sh
+
 SUBSCRIPTIONS_DOMAIN=arxivdigest.mooo.com
 PUBLIC_BASE_URL=https://arxivdigest.mooo.com
 ADMIN_EMAIL=tu@correo.com
@@ -197,24 +241,40 @@ openssl rand -hex 32
 
 ---
 
-## 7. Deploy! (~5 min)
+## 7. Deploy! (~3 min)
 
 ```bash
 ./tools/deploy.sh
 ```
 
-El script valida que `.env.prod` no tenga placeholders, hace `docker compose
-up -d --build`, espera healthchecks, muestra status + URLs.
+El script valida que `.env.prod` no tenga placeholders, hace
+`docker compose pull` (descarga las 4 imágenes desde Docker Hub), luego
+`up -d`, espera healthchecks y muestra status + URLs. **Sin build en la VM**
+— por eso es rápido (~1-3 min vs 10-15 min de build directo).
 
 Si todo va bien:
 
 ```bash
 curl https://arxivdigest.mooo.com/health
 # {"status":"ok"}
+
+# Verificar que el stack cabe en RAM
+docker stats --no-stream
+# La suma de MEM USAGE debe ser <500 MB
+free -h
+# available debe ser >300 MB
 ```
 
 La primera request a HTTPS hace que Caddy emita el certificado de Let's
 Encrypt (puede tardar 30 s).
+
+**Para actualizar código después:**
+```bash
+# en tu laptop
+./tools/build_and_push.sh        # rebuilds + pushes
+# en la VM
+./tools/deploy.sh                # pull + up (Docker detecta cambios y reinicia)
+```
 
 ---
 
@@ -281,17 +341,41 @@ en Oracle Security List o iptables, dominio con typo en `.env.prod`.
 - Verificar que `REPLY_TO=tu-inbox@mailsac.com` matchea el inbox creado.
 - Confirmar API key activa.
 
-**Out of memory** (poco probable en ARM 24GB).
+**Out of memory** (posible en E2.1.Micro de 1 GB; el stack idle usa ~155 MB).
 ```bash
 docker stats
 free -h
+# Si algún container murió con exit 137 (OOM kill):
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs <svc> | tail
+# Subir el limit en docker-compose.prod.yml para ese servicio (+50 MB)
+# y rebuild/repush en local, luego ./tools/deploy.sh
 ```
 
-**Update del código.**
+Como fallback, podés crear un swap file de 1 GB en la VM:
 ```bash
-ssh ubuntu@<IP>
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h
+```
+
+**Update del código** (después de cambiar algo en tu laptop).
+```bash
+# en tu laptop
+./tools/build_and_push.sh        # rebuild + push de las 4 imágenes
+# en la VM (SSH)
 cd ~/arxiv-digest
-./tools/deploy.sh --pull --rebuild
+./tools/deploy.sh --git-pull     # git pull (para refrescar compose/Caddyfile) + pull imágenes + up
+```
+
+**Build de imágenes en Mac M1/M2/M3.**
+El script `build_and_push.sh` ya pasa `--platform linux/amd64`. Para verificar
+que la imagen subida es AMD64 (la VM la rechazaría si subiste ARM):
+```bash
+docker manifest inspect tu-username/arxiv-digest-subscriptions:latest | grep architecture
+# debe decir "amd64"
 ```
 
 **Logs útiles.**
@@ -307,7 +391,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f caddy
 
 | Componente | Plan | Costo |
 |---|---|---|
-| Oracle Cloud VM (Ampere A1) | Always Free | $0 |
+| Oracle Cloud VM (AMD E2.1.Micro) | Always Free | $0 |
+| Docker Hub | Free (repos públicos ilimitados) | $0 |
 | FreeDNS subdomain | Free tier | $0 |
 | Resend SMTP | Free (100 emails/día) | $0 |
 | Mailsac inbox | Free (1500 calls/mes) | $0 |

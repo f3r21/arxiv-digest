@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Deploy de arxiv-digest a un servidor remoto (Oracle Cloud, VPS, etc.).
+# Usa imagenes pre-built desde Docker Hub (no compila en la VM).
 #
 # Uso (en el SERVIDOR, despues de clonar el repo):
 #   cp .env.prod.example .env.prod
-#   # editar .env.prod con valores reales
+#   # editar .env.prod con valores reales (incluido DOCKERHUB_USER)
 #   ./tools/deploy.sh
 #
+# Para publicar nuevas imagenes: en la laptop, ./tools/build_and_push.sh
+# (despues, en la VM, ./tools/deploy.sh re-pullea y reinicia).
+#
 # Flags:
-#   --pull    git pull antes de build (default: skip si hay cambios sin commit)
-#   --rebuild  fuerza rebuild de todas las imagenes
-#   --logs    sigue logs despues de up
+#   --git-pull   git pull antes de pull/up (para refrescar compose o Caddyfile)
+#   --logs       sigue logs despues de up
 
 set -eo pipefail
 
@@ -42,6 +45,7 @@ fi
 
 # Validar que las envs criticas no esten con placeholder
 required_envs=(
+    "DOCKERHUB_USER"
     "SUBSCRIPTIONS_DOMAIN"
     "PUBLIC_BASE_URL"
     "SUBSCRIPTIONS_SECRET"
@@ -52,39 +56,37 @@ required_envs=(
 )
 for var in "${required_envs[@]}"; do
     val=$(grep -E "^${var}=" "$ENV_FILE" | cut -d= -f2- || echo "")
-    if [ -z "$val" ] || [[ "$val" == *"__"*"__"* ]] || [[ "$val" == *"xxxxxxxx"* ]]; then
+    if [ -z "$val" ] || [[ "$val" == *"__"*"__"* ]] || [[ "$val" == *"xxxxxxxx"* ]] \
+        || [[ "$val" == "tu-username" ]] || [[ "$val" == "tu@correo.com" ]]; then
         echo "ERROR: $var en $ENV_FILE esta vacio o con placeholder." >&2
         exit 1
     fi
 done
 
 # --- Parse flags ---
-PULL=0
-REBUILD=0
+GITPULL=0
 FOLLOW_LOGS=0
 for arg in "$@"; do
     case "$arg" in
-        --pull) PULL=1 ;;
-        --rebuild) REBUILD=1 ;;
+        --git-pull) GITPULL=1 ;;
         --logs) FOLLOW_LOGS=1 ;;
         *) echo "WARN: flag desconocida $arg, ignorando" ;;
     esac
 done
 
-# --- Pull si se pidio ---
-if [ "$PULL" = "1" ]; then
+# --- git pull si se pidio (para actualizar configs/compose/Caddyfile) ---
+if [ "$GITPULL" = "1" ]; then
     echo ">> git pull"
     git pull --ff-only
 fi
 
-# --- Build + up ---
-BUILD_FLAG="--build"
-if [ "$REBUILD" = "1" ]; then
-    BUILD_FLAG="--build --no-cache"
-fi
+# --- Pull de imagenes desde Docker Hub + up ---
+echo ">> docker compose pull (desde Docker Hub)"
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
 
+echo
 echo ">> docker compose up"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d $BUILD_FLAG
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
 # --- Esperar healthchecks ---
 echo
