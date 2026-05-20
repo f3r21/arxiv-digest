@@ -1,0 +1,125 @@
+# Stack de produccion. Diferencias vs docker-compose.yml:
+#  - SIN mailhog (en prod los emails salen por Resend/Brevo y los replies
+#    se leen via Mailsac)
+#  - Caddy expone 80+443 publicos (LE auto-emite cert real)
+#  - Healthchecks y restart policies mas estrictos
+#  - .env.prod en lugar de .env
+#
+# Uso:
+#   cp .env.prod.example .env.prod
+#   # editar .env.prod con valores reales
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+services:
+  subscriptions:
+    build: ./subscriptions
+    container_name: arxiv-subscriptions
+    restart: always
+    env_file:
+      - .env.prod
+    volumes:
+      - ./data:/app/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: arxiv-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - .env.prod
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      subscriptions:
+        condition: service_healthy
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  digest:
+    build: ./digest
+    container_name: arxiv-digest
+    restart: always
+    depends_on:
+      subscriptions:
+        condition: service_healthy
+      translator:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    volumes:
+      - ./filters.yml:/app/filters.yml:ro
+      - ./data:/app/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/alive"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  listener:
+    build: ./listener
+    container_name: arxiv-listener
+    restart: always
+    depends_on:
+      subscriptions:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    volumes:
+      - ./data:/app/data
+      - ./pdfs:/app/pdfs
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/alive"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+  translator:
+    build: ./translator
+    container_name: arxiv-translator
+    restart: always
+    environment:
+      MYMEMORY_EMAIL: "${MYMEMORY_EMAIL:-}"
+      TZ: "${TZ:-UTC}"
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "5"}
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -21,5 +21,7 @@ data/*
 pdfs/*
 !pdfs/.gitkeep
 
-# Credenciales locales (Brevo, Mailsac, etc.) - usar .env.example como plantilla
+# Credenciales locales (Resend, Mailsac, etc.) - usar .env.example como plantilla
 .env
+.env.prod
+.env.*.local
