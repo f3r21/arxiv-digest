@@ -3,7 +3,7 @@
                   {{ category_label }}
 ================================================
 
-Hoy: {{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }} tras filtro y dedup.
+Hoy: {{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}.
 Responde con los numeros para recibir los PDFs.
 {% if papers %}
 
@@ -44,3 +44,7 @@ Responde con los numeros para recibir los PDFs.
             arXiv Daily   -   {{ category_label }}
    responde con los numeros para los PDFs
 ------------------------------------------------
+
+Te suscribiste como {{ subscriber_email }}.
+Para darte de baja:
+  {{ unsubscribe_url }}

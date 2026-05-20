@@ -14,35 +14,32 @@
           <tr>
             <td style="padding:40px 40px 26px 40px;border-bottom:2px solid #1a1a1a;text-align:center;">
               <div style="font-family:Georgia,serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#9a8c6a;">arXiv Daily</div>
-              <h1 style="font-family:Georgia,serif;font-size:36px;font-weight:700;margin:8px 0 0 0;letter-spacing:-0.5px;line-height:1.15;">El Digest del {{ category_label }}</h1>
-              <div style="font-size:12px;color:#666;margin-top:16px;letter-spacing:1.5px;text-transform:uppercase;">No. {{ issue }} &middot; {{ date }}</div>
+              <h1 style="font-family:Georgia,serif;font-size:36px;font-weight:700;margin:8px 0 0 0;letter-spacing:-0.5px;line-height:1.15;">Hoy en arXiv</h1>
+              <div style="font-size:12px;color:#9a8c6a;margin-top:10px;letter-spacing:2px;text-transform:uppercase;">{{ category_label|replace(', ', ' &middot; ')|safe }}</div>
+              <div style="font-size:12px;color:#666;margin-top:10px;letter-spacing:1.5px;text-transform:uppercase;">No. {{ issue }} &middot; {{ date }}</div>
             </td>
           </tr>
 
           <tr>
             <td style="padding:26px 40px 0 40px;font-size:15px;line-height:1.65;color:#444;">
-              Hoy <strong style="color:#1a1a1a;">{{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}</strong> tras filtro y dedup. Responde con los numeros para recibir los PDFs adjuntos.
+              Hoy <strong style="color:#1a1a1a;">{{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}</strong>. Responde con los numeros para recibir los PDFs adjuntos.
             </td>
           </tr>
 
           {% if papers %}
           {% set p = papers[0] %}
           <tr>
-            <td style="padding:34px 40px 0 40px;">
+            <td style="background:#faf7f0;padding:34px 40px 36px 40px;border-top:1px solid #e2dccd;">
               <div style="font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#9a8c6a;font-weight:bold;">Editor's Pick</div>
-              <hr style="border:0;border-top:1px solid #1a1a1a;margin:6px 0 0 0;">
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:20px 40px 12px 40px;">
-              <div style="font-size:13px;color:#9a8c6a;font-weight:bold;letter-spacing:1px;">01</div>
-              <h2 style="font-family:Georgia,serif;font-size:26px;line-height:1.25;margin:6px 0 14px 0;font-weight:700;color:#1a1a1a;">{{ p.title }}</h2>
-              <div style="font-size:13px;color:#666;margin-bottom:10px;">{{ p.authors|join(', ')|truncate(80) }}</div>
-              <div style="margin:0 0 16px 0;">
-                <span style="display:inline-block;background:#1a1a1a;color:#f4f1ea;padding:4px 10px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;">{{ p.match_reason }}</span>
+              <hr style="border:0;border-top:2px solid #1a1a1a;margin:6px 0 22px 0;">
+              <div style="font-family:Georgia,serif;font-size:64px;line-height:0.9;color:#d9c89a;font-weight:700;letter-spacing:-2px;">01</div>
+              <h2 style="font-family:Georgia,serif;font-size:30px;line-height:1.2;margin:14px 0 14px 0;font-weight:700;color:#1a1a1a;">{{ p.title }}</h2>
+              <div style="font-size:13px;color:#666;margin-bottom:14px;">{{ p.authors|join(', ')|truncate(80) }}</div>
+              <div style="margin:0 0 22px 0;">
+                <span style="display:inline-block;background:#1a1a1a;color:#f4f1ea;padding:5px 12px;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;">{{ p.match_reason }}</span>
               </div>
-              <p style="font-size:15px;line-height:1.7;color:#222;margin:0 0 16px 0;">{{ p.abstract }}</p>
-              <div style="font-size:13px;color:#444;margin-top:14px;">
+              <p style="font-size:16px;line-height:1.8;color:#222;margin:0 0 20px 0;">{{ p.abstract }}</p>
+              <div style="font-size:13px;color:#444;margin-top:18px;">
                 <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" style="color:#9a8c6a;text-decoration:none;border-bottom:1px solid #9a8c6a;">arxiv.org/abs/{{ p.arxiv_id }}</a>
                 <span style="margin:0 8px;color:#ccc;">&middot;</span>
                 <em>responde con <strong style="color:#1a1a1a;">1</strong> para el PDF</em>
@@ -68,7 +65,7 @@
                 <span style="margin:0 8px;color:#ccc;">&middot;</span>
                 <span style="display:inline-block;background:#f0eadf;color:#5a4d2b;padding:2px 8px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;vertical-align:1px;">{{ p.match_reason }}</span>
               </div>
-              <p style="font-size:14px;line-height:1.65;color:#333;margin:0 0 12px 0;">{{ p.abstract|truncate(280) }}</p>
+              <p style="font-size:14px;line-height:1.7;color:#333;margin:0 0 12px 0;">{{ p.abstract }}</p>
               <div style="font-size:12px;color:#666;">
                 <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" style="color:#9a8c6a;text-decoration:none;">arxiv.org/abs/{{ p.arxiv_id }}</a>
                 <span style="margin:0 8px;color:#ccc;">&middot;</span>
@@ -92,6 +89,10 @@
               <div style="margin-bottom:10px;text-transform:uppercase;letter-spacing:3px;color:#9a8c6a;font-weight:bold;">arXiv Daily</div>
               <div>Responde a este correo con los numeros de los papers que quieres leer.</div>
               <div style="margin-top:4px;">El listener te enviara los PDFs adjuntos en ~30 segundos.</div>
+              <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2dccd;font-size:11px;color:#aaa;">
+                Te suscribiste como <strong style="color:#888;">{{ subscriber_email }}</strong>.
+                <a href="{{ unsubscribe_url }}" style="color:#9a8c6a;">Cancelar suscripcion</a>.
+              </div>
             </td>
           </tr>
 
