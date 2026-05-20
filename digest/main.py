@@ -10,6 +10,7 @@ from arxiv_client import fetch_papers
 from email_sender import send_digest
 from filter_engine import apply_filters, load_filters
 from shared_state import get_unseen, init_db, mark_seen, save_last_digest
+from translator_client import translate_papers
 
 logger = logging.getLogger("digest")
 logging.basicConfig(
@@ -31,6 +32,9 @@ def run_digest() -> None:
     if not matched:
         logger.info("PROFILE: 0 papers tras filtro, digest no enviado")
         return
+    translator_url = os.environ.get("TRANSLATOR_URL", "").strip()
+    if translator_url:
+        matched = translate_papers(matched, translator_url)
     capped = matched[:max_papers]
     omitted = len(matched) - len(capped)
     save_last_digest(capped)
