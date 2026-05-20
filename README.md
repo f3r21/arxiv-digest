@@ -1,50 +1,67 @@
 # arxiv-digest
 
-Sistema que envía un digest diario de papers nuevos
-de [arXiv](https://arxiv.org) a un buzón de correo. Respondes el email con los
-números de los papers que te interesan y el sistema te devuelve esos PDFs como
-adjuntos. Todo corre en contenedores con `docker compose`.
+Sistema multi-usuario que envía un digest diario de papers nuevos
+de [arXiv](https://arxiv.org) a cada suscriptor con **sus propias categorías**
+y keywords. Respondes el email con los números de los papers que te interesan
+y el sistema te devuelve esos PDFs como adjuntos. Todo corre en contenedores
+con `docker compose`.
+
+Cualquiera se suscribe desde un formulario web (con double opt-in) y elige
+entre todas las categorías oficiales de arXiv (cs.\*, math.\*, stat.\*, etc.).
 
 Proyecto del curso **CS3P2 Cloud Computing** — caso de uso de Docker.
 
 ## Arquitectura
 
-Cuatro servicios orquestados por `docker-compose.yml`:
+Seis servicios orquestados por `docker-compose.yml`:
 
 ```
-                   +-------------------+
-   arXiv API ---->  |  digest           |  --HTTP--> +--------------+
-   (export)         |  scheduler diario |            |  translator  | --HTTPS--> MyMemory
-                    +-------------------+            +--------------+
-                            | SMTP
-                            v
-                    +-----------+
-                    |  mailhog  |
-                    |  (buzon)  |
-                    +-----------+
-                            ^
-   arXiv PDFs <----  +-------------------+  <--poll API---/
-                     |  listener         |  --SMTP (reply + PDFs)--> mailhog
-                     |  procesa replies  |
-                     +-------------------+
+            internet                       LAN docker
+   +-----+   :80/:443    +---------+   +---------------+
+   | www | ------------> |  caddy  |-->| subscriptions |  (FastAPI form +
+   +-----+   HTTPS auto  +---------+   |  + SQLite DB  |   double opt-in)
+                                       +---------------+
+                                              ^   subscribers.db
+                                              |
+   arXiv API ---HTTP--->  +-----------+    --|--->    +--------------+
+   (export)               |  digest   |               |  translator  | --> MyMemory
+                          | scheduler |-------------> +--------------+
+                          +-----------+   SMTP
+                                |
+                                v
+                         +-----------+
+                         |  mailhog  |  (dev)   o   Resend/Brevo (prod)
+                         |  (buzon)  |
+                         +-----------+
+                                ^
+   arXiv PDFs <-----    +-----------+  <-- poll inbox API ---/
+                        |  listener | --SMTP (reply + PDFs)--> sender real
+                        +-----------+
 ```
 
-- **digest** — cada día consulta arXiv, filtra por `filters.yml`, deduplica
-  contra lo ya enviado, pide al `translator` traducir los papers que pasaron el
-  filtro y manda el digest por email.
+- **subscriptions** — FastAPI con formulario de suscripción y endpoints
+  `/subscribe`, `/confirm`, `/unsubscribe`. Es el único que escribe la tabla
+  `subscribers` en `data/subscribers.db`. Manda email de confirmación firmado
+  con token (válido 48 h).
+- **caddy** — reverse proxy con HTTPS automático. En producción obtiene cert
+  de Let's Encrypt; en dev (`SUBSCRIPTIONS_DOMAIN=localhost`) usa CA interno.
+- **digest** — cada día lista los suscriptores activos, hace **una sola**
+  consulta a arXiv con la unión de categorías, y aplica filtro + dedup +
+  email por suscriptor. Cada email lleva un footer + `List-Unsubscribe`
+  personalizado.
 - **translator** — microservicio FastAPI interno; expone `POST /translate` y
-  llama a la API pública de [MyMemory](https://mymemory.translated.net/doc/spec.php)
-  (de la lista [public-apis](https://github.com/public-apis/public-apis)). Sin
-  API key. Hace chunking por oración para respetar el límite de ~500 bytes por
-  query y cachea en memoria. Si MyMemory falla, devuelve el texto original (el
-  digest sigue saliendo en inglés).
-- **listener** — hace polling a la API de MailHog; cuando ve un reply con
-  números, descarga esos PDFs de arXiv y responde con los adjuntos.
-- **mailhog** — servidor SMTP de prueba con interfaz web; hace de buzón. No sale
-  correo real a internet.
+  llama a la API pública de [MyMemory](https://mymemory.translated.net/doc/spec.php).
+  Sin API key. Cachea por texto, así que repetir un paper para N suscriptores
+  cuesta una sola llamada.
+- **listener** — hace polling al inbox configurado; cuando ve un reply,
+  resuelve el `From` contra la tabla de suscriptores, busca el snapshot
+  per-usuario y le devuelve los PDFs al sender. Mensajes de senders
+  desconocidos se descartan con log.
+- **mailhog** — servidor SMTP de prueba con interfaz web; hace de buzón en
+  dev. **No se expone a internet** (puertos sólo en `127.0.0.1`).
 
-El estado compartido (papers vistos, snapshot del último digest) vive en el
-volumen `./data`.
+Todo el estado (suscriptores, papers vistos por suscriptor, snapshot del
+último digest) vive en `./data/subscribers.db` (SQLite con WAL).
 
 ## Requisitos previos
 
@@ -75,40 +92,67 @@ nada más. Para enviar a tu correo real, ver [Modo live](#modo-live-brevo--mails
 
 ## Levantar el stack
 
+Antes de arrancar genera un `SUBSCRIPTIONS_SECRET` y ponlo en `.env`:
+
+```bash
+echo "SUBSCRIPTIONS_SECRET=$(openssl rand -hex 32)" >> .env
+```
+
 ```bash
 docker compose up -d --build
 docker compose ps
 ```
 
-Los cuatro servicios deben aparecer en estado `running`. Luego abre la interfaz
-de MailHog en el navegador:
+Los seis servicios deben aparecer `healthy`/`running`. URLs útiles:
 
-```
-http://localhost:8025
+- Formulario de suscripción: `https://localhost` (cert autofirmado en dev;
+  acepta el warning del navegador la primera vez).
+- Buzón MailHog: `http://localhost:8025`.
+
+## Suscribirse al digest
+
+1. Abre `https://localhost/` en el navegador.
+2. Pon tu email, busca/elige categorías arXiv (cs.\*, math.\*, etc.) y
+   opcionalmente keywords.
+3. En MailHog (`http://localhost:8025`) aparece el email de confirmación; haz
+   click en el link.
+4. Listo: ya estás en la tabla `subscribers`. El próximo digest lo recibes
+   solo tú con tus categorías.
+
+Para inspeccionar el estado:
+
+```bash
+sqlite3 data/subscribers.db 'select id,email,categories_json from subscribers'
 ```
 
 ## Disparar el digest manualmente
 
-El digest está programado para las 07:00, pero puedes dispararlo cuando quieras:
+El digest está programado para las 07:00 (configurable con `DIGEST_HOUR`),
+pero puedes dispararlo cuando quieras:
 
 ```bash
 docker compose exec digest python -c "from main import run_digest; run_digest()"
 ```
 
-Tras unos segundos aparece un email nuevo en MailHog con los papers filtrados.
+Hace **una sola** consulta a arXiv con la unión de categorías de todos los
+suscriptores activos y manda un email personalizado a cada uno.
 
 ## Probar el flujo de reply (digest -> PDFs)
 
-Cuando respondes el digest con números de paper, el listener te devuelve esos
-PDFs adjuntos. Hay dos formas de probarlo:
+Cuando respondes el digest con números de paper, el listener identifica al
+suscriptor por tu `From`, lee tu snapshot personal del último digest y te
+devuelve los PDFs.
 
-### Opción A — desde la interfaz de MailHog (igual en todos los SO)
+### Opción A — desde la interfaz de MailHog
 
-1. En `http://localhost:8025`, abre el email del digest.
+1. En `http://localhost:8025`, abre el digest dirigido a tu suscriptor (por
+   ejemplo `a@local`).
 2. Clic en **Reply**.
-3. Pon `From: fer@local` y `To: fer@local`.
+3. Asegúrate que `From: a@local` (el email con el que te suscribiste).
 4. En el cuerpo escribe los números, por ejemplo: `quiero los papers 1, 3 y 5`.
-5. **Send**. En ~30 s aparece un email `Re: ...` con los PDFs adjuntos.
+5. **Send**. En ~30 s aparece un email `Re: ...` dirigido a `a@local` con los
+   PDFs adjuntos. Replies de senders no suscritos se descartan (revisa los
+   logs del listener: `docker compose logs listener`).
 
 ### Opción B — con el helper `tools/send_test_reply.py`
 
@@ -148,24 +192,13 @@ del envío. Configuración relevante en `docker-compose.yml`:
   ningún otro código. También puedes bajar solo ese contenedor:
   `docker compose stop translator`.
 
-## Editar el filtro
+## Filtros legacy (`filters.yml`)
 
-Edita `filters.yml` (categorías de arXiv, máximo de papers, keywords y autores).
-**No hace falta rebuild**: el digest lo lee en cada corrida porque está montado
-como volumen.
+`filters.yml` ya no es la fuente de verdad. Cada suscriptor elige sus
+categorías y keywords desde el formulario web; el digest combina las de todos
+los suscriptores activos en una sola query a arXiv.
 
-### Categorías múltiples
-
-`filters.yml` acepta una sola categoría (`category: cs.DC`) o una lista
-(`categories: [cs.DC, cs.AI]`). Para sobrescribir sin tocar el YAML:
-
-```bash
-# en .env
-ARXIV_CATEGORIES=cs.DC,cs.AI
-```
-
-La env tiene precedencia sobre `filters.yml`. arXiv combina las categorías con
-`OR` en la query.
+El archivo queda como referencia y para el script `tools/send_test_reply.py`.
 
 ## Modo live: Brevo + Mailsac
 
@@ -218,8 +251,32 @@ El digest llegará a tu Gmail (`From: tucorreo@gmail.com`,
 listener la lee por API y te manda los PDFs.
 
 **Rate-limit Mailsac**: el plan gratis da 1500 calls/mes; con `POLL_INTERVAL_S=600`
-(10 min) gastas ~4320 calls/mes — sigue siendo bajo y deja margen para escalado.
-Para una demo en vivo, baja temporalmente a `30` durante la presentación.
+(10 min) gastas ~4320 calls/mes. Si esperás muchos suscriptores activos,
+considerá subir el plan.
+
+## Deploy en VPS (Hetzner / DO / Oracle Free)
+
+1. En tu DNS, crea un A record que apunte tu subdominio al VPS:
+   `digest.tu-dominio.com -> <IP del VPS>`.
+2. Abre puertos `80` y `443` en el firewall.
+3. Clona el repo en el VPS y crea `.env` así:
+   ```env
+   SUBSCRIPTIONS_DOMAIN=digest.tu-dominio.com
+   PUBLIC_BASE_URL=https://digest.tu-dominio.com
+   ADMIN_EMAIL=tu@correo.com
+   SUBSCRIPTIONS_SECRET=$(openssl rand -hex 32)
+   # + el bloque de Resend/Brevo + Mailsac de arriba
+   ```
+4. `docker compose up -d --build`. Caddy obtiene el certificado de Let's
+   Encrypt en la primera request.
+5. Verifica: `curl -sv https://digest.tu-dominio.com/health`.
+
+Para que Gmail no te marque como spam:
+
+- En Resend/Brevo verifica el dominio del `FROM_ADDR` con DKIM + SPF.
+- Publica un registro DMARC: `v=DMARC1; p=none; rua=mailto:tu@correo.com`.
+- El digest ya manda `List-Unsubscribe` y `List-Unsubscribe-Post` para
+  cumplir con [Gmail bulk sender requirements](https://support.google.com/a/answer/14229414).
 
 ## Apagar
 
@@ -253,28 +310,43 @@ docker compose down -v    # ademas borra los volumenes (estado limpio)
 
 ```
 arxiv-digest/
-├── docker-compose.yml      # orquesta los 4 servicios
+├── docker-compose.yml      # orquesta los 6 servicios
 ├── .env.example            # plantilla de envs (copiar a .env)
-├── filters.yml             # configuracion editable del filtro
+├── filters.yml             # legacy (referencia)
 ├── .gitattributes          # normaliza fin de linea (LF)
-├── digest/                 # servicio digest
+├── caddy/
+│   └── Caddyfile           # reverse proxy + HTTPS automatico
+├── subscriptions/          # servicio de suscripciones (FastAPI)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── main.py             # endpoints /, /subscribe, /confirm, /unsubscribe
+│   ├── db.py               # owner de subscribers.db
+│   ├── tokens.py           # firmas itsdangerous (confirm 48h, unsub)
+│   ├── email_outbound.py   # SMTP de confirmacion
+│   ├── categories_catalog.py
+│   ├── arxiv_categories.json
+│   ├── templates/          # form.html, confirm_*.html, email_confirm.*
+│   └── static/             # app.css, app.js (buscador client-side)
+├── digest/                 # servicio digest (per-subscriber)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── main.py             # scheduler + run_digest()
 │   ├── arxiv_client.py     # consulta la API de arXiv
-│   ├── filter_engine.py    # aplica filters.yml
+│   ├── filter_engine.py    # aplica keywords/authors per-subscriber
 │   ├── translator_client.py# llama al servicio translator
-│   ├── email_sender.py     # arma y envia el digest
-│   ├── shared_state.py     # SQLite + snapshot del digest
-│   └── templates/digest.txt
+│   ├── email_sender.py     # send_digest_to(subscriber, papers, issue)
+│   ├── subscriber_repo.py  # read subscribers, per-user state
+│   ├── unsubscribe_tokens.py # firma URL de unsubscribe
+│   └── templates/digest.txt|.html
 ├── translator/             # servicio translator (FastAPI + MyMemory)
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── main.py             # POST /translate, chunking, cache
-├── listener/               # servicio listener
+├── listener/               # servicio listener multi-subscriber
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py             # poll al backend de inbox configurado
+│   ├── main.py             # poll + sender lookup
+│   ├── subscriber_repo.py  # find_by_email, get_last_digest_for
 │   ├── inbox/              # backends de inbox (mailhog | mailsac)
 │   │   ├── base.py         # Protocol comun
 │   │   ├── mailhog.py      # cliente HTTP de MailHog
@@ -284,7 +356,8 @@ arxiv-digest/
 │   ├── email_sender.py     # responde con adjuntos
 │   └── db.py               # SQLite de idempotencia
 ├── tools/
-│   └── send_test_reply.py  # helper para probar el flujo de reply
+│   ├── send_test_reply.py    # helper para probar el flujo de reply
+│   └── build_arxiv_categories.py  # refresca arxiv_categories.json
 ├── data/                   # estado en runtime (no versionado)
 └── pdfs/                   # PDFs temporales (no versionado)
 ```

@@ -1,0 +1,30 @@
+# arxiv-digest reverse proxy.
+#
+# Caddy decide automaticamente el emisor de cert segun el hostname:
+# - localhost / 127.0.0.1 -> CA interno (autofirmado)
+# - dominio publico (digest.example.com) -> Let's Encrypt via ACME
+#
+# Requisitos prod: SUBSCRIPTIONS_DOMAIN apuntando al servidor (A record),
+# puertos 80 y 443 abiertos, ADMIN_EMAIL valido.
+
+{$SUBSCRIPTIONS_DOMAIN} {
+	encode gzip
+
+	reverse_proxy subscriptions:8000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

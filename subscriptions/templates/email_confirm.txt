@@ -1,0 +1,13 @@
+Hola,
+
+Recibimos una solicitud de suscripcion al arXiv Daily para {{ email }}.
+
+Categorias elegidas:
+{% for c in categories %}  - {{ c }}
+{% endfor %}
+Para confirmar y empezar a recibir el digest, abre este link
+(valido por 48 horas):
+
+  {{ confirm_url }}
+
+Si no fuiste tu, ignora este mensaje y la suscripcion no se activa.

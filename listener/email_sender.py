@@ -16,11 +16,13 @@ SMTP_PASS = os.environ.get("SMTP_PASS", "")
 SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "0") == "1"
 FROM_ADDR = os.environ.get("FROM_ADDR", "arxiv-digest@local")
 REPLY_TO = os.environ.get("REPLY_TO", "").strip()
-TO_ADDR = os.environ.get("RECIPIENT", "fer@local")
 
 
 def send_reply(
-    original_subject: str, numbers: list[int], pdfs: list[dict[str, Any]]
+    to_addr: str,
+    original_subject: str,
+    numbers: list[int],
+    pdfs: list[dict[str, Any]],
 ) -> None:
     """Compone email con los PDFs como attachments y los limpia al final."""
     subject_clean = original_subject.replace("Re: ", "").replace("RE: ", "")
@@ -31,7 +33,7 @@ def send_reply(
     body_lines.append("")
     msg = EmailMessage()
     msg["From"] = FROM_ADDR
-    msg["To"] = TO_ADDR
+    msg["To"] = to_addr
     if REPLY_TO:
         msg["Reply-To"] = REPLY_TO
     msg["Subject"] = subject
@@ -44,12 +46,12 @@ def send_reply(
             subtype="pdf",
             filename=path.name,
         )
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
         if SMTP_USE_TLS:
             s.starttls()
         if SMTP_USER:
             s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
-    logger.info("RESULT: reply enviado con %d PDFs", len(pdfs))
+    logger.info("RESULT: reply enviado a %s con %d PDFs", to_addr, len(pdfs))
     for p in pdfs:
         Path(p["path"]).unlink(missing_ok=True)

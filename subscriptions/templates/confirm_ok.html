@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Suscripcion confirmada</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <main class="container narrow">
+    <h1>Listo.</h1>
+    <p>
+      Confirmamos <strong>{{ email }}</strong> para las categorias:
+    </p>
+    <ul>
+      {% for c in categories %}<li><code>{{ c }}</code></li>{% endfor %}
+    </ul>
+    <p>El proximo digest te llega en la siguiente corrida diaria.</p>
+    <p><a href="/">Suscribir otro email</a></p>
+  </main>
+</body>
+</html>

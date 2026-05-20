@@ -7,8 +7,6 @@ from typing import Any
 
 import requests
 
-from db import get_last_digest_papers
-
 logger = logging.getLogger("listener")
 
 PDFS_DIR = Path("/app/pdfs")
@@ -20,9 +18,13 @@ def _slugify(text: str, max_len: int = 30) -> str:
     return cleaned.strip("_")[:max_len]
 
 
-def download_pdfs(numbers: list[int]) -> list[dict[str, Any]]:
-    """Descarga los PDFs y devuelve lista con paths locales y titulos."""
-    papers = get_last_digest_papers()
+def download_pdfs(
+    numbers: list[int], papers: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Descarga los PDFs y devuelve lista con paths locales y titulos.
+
+    `papers` viene del snapshot per-suscriptor (subscriber_last_digest).
+    """
     PDFS_DIR.mkdir(parents=True, exist_ok=True)
     out: list[dict[str, Any]] = []
     for n in numbers:
@@ -31,10 +33,10 @@ def download_pdfs(numbers: list[int]) -> list[dict[str, Any]]:
             continue
         p = papers[n - 1]
         first_author = (
-            p["authors"][0].split()[-1] if p["authors"] else "unknown"
+            p["authors"][0].split()[-1] if p.get("authors") else "unknown"
         )
-        year = p["published"][:4]
-        slug = _slugify(p["title"])
+        year = (p.get("published") or "0000")[:4]
+        slug = _slugify(p.get("title") or "untitled")
         filename = f"{first_author}_{year}_{slug}.pdf"
         path = PDFS_DIR / filename
         try:
@@ -50,10 +52,13 @@ def download_pdfs(numbers: list[int]) -> list[dict[str, Any]]:
             out.append({
                 "number": n,
                 "path": str(path),
-                "title": p["title"],
-                "arxiv_id": p["arxiv_id"],
+                "title": p.get("title", ""),
+                "arxiv_id": p.get("arxiv_id", ""),
             })
-            logger.info("PROFILE: descargado paper %d (%s) -> %s", n, p["arxiv_id"], filename)
+            logger.info(
+                "PROFILE: descargado paper %d (%s) -> %s",
+                n, p.get("arxiv_id", "?"), filename,
+            )
         except Exception as exc:
             logger.error("ERROR: descarga del paper %d fallo: %s", n, exc)
             if path.exists():

@@ -11,11 +11,16 @@ logger = logging.getLogger("listener")
 
 @dataclass(frozen=True)
 class MailhogBackend:
-    """Cliente de la API HTTP de MailHog (modo dev)."""
+    """Cliente de la API HTTP de MailHog (modo dev).
+
+    Multi-suscriptor: ya no filtramos por RECIPIENT (cada suscriptor tiene su
+    propio email). Solo excluimos mensajes salientes del propio digest
+    (SELF_ADDR), el resto se entrega al listener que hace sender-lookup contra
+    la tabla subscribers.
+    """
 
     list_url: str
     delete_url: str
-    recipient: str
     self_addr: str
 
     @classmethod
@@ -27,7 +32,6 @@ class MailhogBackend:
             delete_url=os.environ.get(
                 "MAILHOG_DELETE_API", "http://mailhog:8025/api/v1/messages"
             ),
-            recipient=os.environ.get("RECIPIENT", "fer@local"),
             self_addr=os.environ.get("SELF_ADDR", "arxiv-digest@local"),
         )
 
@@ -42,8 +46,6 @@ class MailhogBackend:
         for m in r.json().get("items", []):
             to_addrs = [t["Mailbox"] + "@" + t["Domain"] for t in m["To"]]
             from_mb = m["From"]["Mailbox"] + "@" + m["From"]["Domain"]
-            if self.recipient not in to_addrs:
-                continue
             if from_mb == self.self_addr:
                 continue
             subject = m["Content"]["Headers"].get("Subject", [""])[0]

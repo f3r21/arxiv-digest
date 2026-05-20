@@ -1,19 +1,69 @@
-# Toda la configuracion (SMTP, inbox, categorias, scheduler) vive en `.env`.
+# Toda la configuracion (SMTP, inbox, dominio, secrets) vive en `.env`.
 # Copia `.env.example` a `.env` antes de levantar el stack.
 services:
+  subscriptions:
+    build: ./subscriptions
+    container_name: arxiv-subscriptions
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: arxiv-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file:
+      - .env
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      subscriptions:
+        condition: service_healthy
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+
   digest:
     build: ./digest
     container_name: arxiv-digest
     restart: unless-stopped
     depends_on:
-      - mailhog
-      - translator
+      subscriptions:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+      translator:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
       - ./filters.yml:/app/filters.yml:ro
       - ./data:/app/data
     networks: [internal]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/alive"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     logging:
       driver: json-file
       options: {max-size: "5m", max-file: "3"}
@@ -23,13 +73,22 @@ services:
     container_name: arxiv-listener
     restart: unless-stopped
     depends_on:
-      - mailhog
+      subscriptions:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
     env_file:
       - .env
     volumes:
       - ./data:/app/data
       - ./pdfs:/app/pdfs
     networks: [internal]
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/alive"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     logging:
       driver: json-file
       options: {max-size: "5m", max-file: "3"}
@@ -42,6 +101,12 @@ services:
       MYMEMORY_EMAIL: ""
       TZ: America/Lima
     networks: [internal]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=2).status == 200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
     logging:
       driver: json-file
       options: {max-size: "5m", max-file: "3"}
@@ -51,10 +116,16 @@ services:
     container_name: arxiv-mailhog
     restart: unless-stopped
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      # Solo expuesto en localhost para no leakear el SMTP/UI a internet
+      # cuando se corre en un VPS. En PROD usar Resend/Brevo + Mailsac, no MailHog.
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
     networks: [internal]
 
 networks:
   internal:
     driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
