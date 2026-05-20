@@ -1,5 +1,8 @@
-# Categoria de arxiv a consultar. Catalogo: https://arxiv.org/category_taxonomy
-category: cs.DC
+# Categorias de arxiv a consultar. Catalogo: https://arxiv.org/category_taxonomy
+# Acepta lista (`categories`) o string (`category`). Si ambos estan, gana
+# `categories`. La env ARXIV_CATEGORIES (CSV) sobrescribe lo de aqui.
+categories:
+  - cs.DC
 
 # Maximo papers en el digest (cap aplicado tras filtrar).
 max_papers: 15

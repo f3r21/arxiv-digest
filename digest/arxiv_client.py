@@ -10,20 +10,40 @@ logger = logging.getLogger("digest")
 ARXIV_API = "https://export.arxiv.org/api/query"
 
 
-def fetch_papers(category: str, max_results: int = 50) -> list[dict[str, Any]]:
-    """Consulta arxiv API por papers recientes en una categoria.
+def _build_search_query(categories: list[str]) -> str:
+    """Construye la clausula `search_query=...` para una o varias categorias.
 
-    :param category: codigo de categoria arxiv (ej "cs.DC").
+    Una sola categoria -> `cat:cs.DC`.
+    Multiples -> `(cat:cs.DC+OR+cat:cs.AI)` (formato URL-encoded de arxiv).
+    """
+    if len(categories) == 1:
+        return f"cat:{categories[0]}"
+    joined = "+OR+".join(f"cat:{c}" for c in categories)
+    return f"({joined})"
+
+
+def fetch_papers(
+    categories: list[str], max_results: int = 50
+) -> list[dict[str, Any]]:
+    """Consulta arxiv API por papers recientes en una o varias categorias.
+
+    :param categories: lista de codigos de categoria (ej ["cs.DC", "cs.AI"]).
     :param max_results: limite de papers a traer.
     :returns: lista de dicts con arxiv_id, title, authors, abstract,
         published, pdf_url, categories.
     """
+    if not categories:
+        raise ValueError("fetch_papers requiere al menos una categoria")
+    search_query = _build_search_query(categories)
     url = (
-        f"{ARXIV_API}?search_query=cat:{category}"
+        f"{ARXIV_API}?search_query={search_query}"
         f"&sortBy=submittedDate&sortOrder=descending"
         f"&max_results={max_results}"
     )
-    logger.info("PROFILE: query arxiv category=%s max=%d", category, max_results)
+    logger.info(
+        "PROFILE: query arxiv categories=%s max=%d",
+        ",".join(categories), max_results,
+    )
     feed = feedparser.parse(url)
     papers: list[dict[str, Any]] = []
     for entry in feed.entries:

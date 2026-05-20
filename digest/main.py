@@ -9,7 +9,13 @@ import schedule
 from arxiv_client import fetch_papers
 from email_sender import send_digest
 from filter_engine import apply_filters, load_filters
-from shared_state import get_unseen, init_db, mark_seen, save_last_digest
+from shared_state import (
+    get_unseen,
+    init_db,
+    mark_seen,
+    record_digest_issue,
+    save_last_digest,
+)
 from translator_client import translate_papers
 
 logger = logging.getLogger("digest")
@@ -22,11 +28,22 @@ FILTERS_PATH = "/app/filters.yml"
 DIGEST_HOUR = os.environ.get("DIGEST_HOUR", "07:00")
 
 
+def _resolve_categories(filters: dict) -> list[str]:
+    """Env ARXIV_CATEGORIES (CSV) tiene precedencia sobre filters.yml."""
+    env_cats = os.environ.get("ARXIV_CATEGORIES", "").strip()
+    if env_cats:
+        return [c.strip() for c in env_cats.split(",") if c.strip()]
+    return list(filters["categories"])
+
+
 def run_digest() -> None:
     """Ciclo completo: arxiv -> filter -> dedup -> save -> email."""
     filters = load_filters(FILTERS_PATH)
+    categories = _resolve_categories(filters)
+    filters["categories"] = categories
+    filters["category_label"] = ", ".join(categories)
     max_papers = int(filters.get("max_papers", 15))
-    raw = fetch_papers(filters["category"], max_results=50)
+    raw = fetch_papers(categories, max_results=50)
     new = get_unseen(raw)
     matched = apply_filters(new, filters)
     if not matched:
@@ -38,7 +55,8 @@ def run_digest() -> None:
     capped = matched[:max_papers]
     omitted = len(matched) - len(capped)
     save_last_digest(capped)
-    send_digest(capped, omitted, filters)
+    issue = record_digest_issue(len(capped))
+    send_digest(capped, omitted, filters, issue=issue)
     mark_seen([p["arxiv_id"] for p in capped])
     logger.info(
         "RESULT: digest %d enviados, %d omitidos, %d nuevos tras dedup",

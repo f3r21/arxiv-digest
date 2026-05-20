@@ -28,12 +28,19 @@ def _conn() -> Iterator[sqlite3.Connection]:
 
 
 def init_db() -> None:
-    """Crea la tabla papers_seen si no existe."""
+    """Crea las tablas papers_seen y digest_issues si no existen."""
     with _conn() as c:
         c.execute("""
             CREATE TABLE IF NOT EXISTS papers_seen (
                 arxiv_id TEXT PRIMARY KEY,
                 seen_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS digest_issues (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sent_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                paper_count INTEGER NOT NULL
             )
         """)
 
@@ -58,3 +65,13 @@ def save_last_digest(papers: list[dict[str, Any]]) -> None:
     """Guarda los papers del digest enviado para que el listener los mapee."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LAST_DIGEST_JSON.write_text(json.dumps(papers, ensure_ascii=False, indent=2))
+
+
+def record_digest_issue(paper_count: int) -> int:
+    """Inserta una fila en digest_issues y devuelve el id (numero de edicion)."""
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO digest_issues (paper_count) VALUES (?)",
+            (paper_count,),
+        )
+        return int(cur.lastrowid)

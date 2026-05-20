@@ -1,3 +1,5 @@
+# Toda la configuracion (SMTP, inbox, categorias, scheduler) vive en `.env`.
+# Copia `.env.example` a `.env` antes de levantar el stack.
 services:
   digest:
     build: ./digest
@@ -6,14 +8,8 @@ services:
     depends_on:
       - mailhog
       - translator
-    environment:
-      SMTP_HOST: mailhog
-      SMTP_PORT: "1025"
-      RECIPIENT: fer@local
-      DIGEST_HOUR: "07:00"
-      RUN_NOW: "0"
-      TRANSLATOR_URL: http://translator:8000
-      TZ: America/Lima
+    env_file:
+      - .env
     volumes:
       - ./filters.yml:/app/filters.yml:ro
       - ./data:/app/data
@@ -28,14 +24,8 @@ services:
     restart: unless-stopped
     depends_on:
       - mailhog
-    environment:
-      MAILHOG_API: http://mailhog:8025/api/v2/messages
-      MAILHOG_DELETE_API: http://mailhog:8025/api/v1/messages
-      SMTP_HOST: mailhog
-      SMTP_PORT: "1025"
-      RECIPIENT: fer@local
-      POLL_INTERVAL_S: "30"
-      TZ: America/Lima
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
       - ./pdfs:/app/pdfs

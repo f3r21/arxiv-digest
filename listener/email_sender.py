@@ -1,4 +1,4 @@
-"""Envia el reply con PDFs adjuntos."""
+"""Envia el reply con PDFs adjuntos. Mismas envs SMTP que el digest."""
 
 import logging
 import os
@@ -11,7 +11,11 @@ logger = logging.getLogger("listener")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "mailhog")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
-FROM_ADDR = "arxiv-digest@local"
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
+SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "0") == "1"
+FROM_ADDR = os.environ.get("FROM_ADDR", "arxiv-digest@local")
+REPLY_TO = os.environ.get("REPLY_TO", "").strip()
 TO_ADDR = os.environ.get("RECIPIENT", "fer@local")
 
 
@@ -28,6 +32,8 @@ def send_reply(
     msg = EmailMessage()
     msg["From"] = FROM_ADDR
     msg["To"] = TO_ADDR
+    if REPLY_TO:
+        msg["Reply-To"] = REPLY_TO
     msg["Subject"] = subject
     msg.set_content("\n".join(body_lines))
     for p in pdfs:
@@ -39,6 +45,10 @@ def send_reply(
             filename=path.name,
         )
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+        if SMTP_USE_TLS:
+            s.starttls()
+        if SMTP_USER:
+            s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
     logger.info("RESULT: reply enviado con %d PDFs", len(pdfs))
     for p in pdfs:

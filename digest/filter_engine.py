@@ -6,9 +6,25 @@ import yaml
 
 
 def load_filters(path: str) -> dict[str, Any]:
-    """Carga el yaml de configuracion."""
+    """Carga el yaml y normaliza la(s) categoria(s) a una lista.
+
+    Acepta tanto `categories: [cs.DC, cs.AI]` (lista) como `category: cs.DC`
+    (string). Devuelve el dict con la clave `categories` siempre presente
+    como lista no vacia.
+    """
     with open(path) as f:
-        return yaml.safe_load(f)
+        data: dict[str, Any] = yaml.safe_load(f) or {}
+    cats = data.get("categories")
+    if cats is None and "category" in data:
+        cats = [data["category"]]
+    if not cats or not isinstance(cats, list):
+        raise ValueError(
+            "filters.yml debe definir `categories` (lista) o `category` (string)"
+        )
+    data["categories"] = [str(c).strip() for c in cats if str(c).strip()]
+    if not data["categories"]:
+        raise ValueError("filters.yml `categories` no puede estar vacio")
+    return data
 
 
 def apply_filters(

@@ -61,6 +61,18 @@ volumen `./data`.
 Los comandos `docker compose` de este README son **idénticos** en PowerShell
 (Windows) y en bash/zsh (macOS/Linux).
 
+## Configuración (`.env`)
+
+Toda la config sensible (SMTP, inbox backend, categorías) vive en `.env`. La
+primera vez:
+
+```bash
+cp .env.example .env
+```
+
+Los defaults apuntan a MailHog local: el stack funciona end-to-end sin tocar
+nada más. Para enviar a tu correo real, ver [Modo live](#modo-live-brevo--mailsac).
+
 ## Levantar el stack
 
 ```bash
@@ -68,8 +80,8 @@ docker compose up -d --build
 docker compose ps
 ```
 
-Los tres servicios deben aparecer en estado `running`. Luego abre la interfaz de
-MailHog en el navegador:
+Los cuatro servicios deben aparecer en estado `running`. Luego abre la interfaz
+de MailHog en el navegador:
 
 ```
 http://localhost:8025
@@ -138,9 +150,76 @@ del envío. Configuración relevante en `docker-compose.yml`:
 
 ## Editar el filtro
 
-Edita `filters.yml` (categoría de arXiv, máximo de papers, keywords y autores).
+Edita `filters.yml` (categorías de arXiv, máximo de papers, keywords y autores).
 **No hace falta rebuild**: el digest lo lee en cada corrida porque está montado
 como volumen.
+
+### Categorías múltiples
+
+`filters.yml` acepta una sola categoría (`category: cs.DC`) o una lista
+(`categories: [cs.DC, cs.AI]`). Para sobrescribir sin tocar el YAML:
+
+```bash
+# en .env
+ARXIV_CATEGORIES=cs.DC,cs.AI
+```
+
+La env tiene precedencia sobre `filters.yml`. arXiv combina las categorías con
+`OR` en la query.
+
+## Modo live: Brevo + Mailsac
+
+Para recibir el digest en un correo real **sin Gmail + app password**:
+
+1. **Brevo** (SMTP saliente, 300 emails/día gratis):
+   - Crea cuenta en [brevo.com](https://www.brevo.com).
+   - Verifica tu Gmail como *sender identity*.
+   - Genera una *SMTP key* en **SMTP & API**.
+
+2. **Mailsac** (inbox entrante, 1500 calls/mes gratis):
+   - Crea cuenta en [mailsac.com](https://mailsac.com).
+   - Reserva una inbox: `<lo-que-sea>@mailsac.com`.
+   - Genera una *API key*.
+
+3. Edita `.env` (descomenta el bloque de modo live y rellena):
+
+   ```env
+   SMTP_HOST=smtp-relay.brevo.com
+   SMTP_PORT=587
+   SMTP_USER=tu-login@smtp-brevo.com
+   SMTP_PASS=xxxxxxxxxxxxxxxx
+   SMTP_USE_TLS=1
+   FROM_ADDR=tucorreo@gmail.com
+   REPLY_TO=tu-inbox@mailsac.com
+   RECIPIENT=tucorreo@gmail.com
+
+   INBOX_BACKEND=mailsac
+   MAILSAC_API_KEY=k_xxxxxxxxxxxxxxxx
+   MAILSAC_INBOX=tu-inbox@mailsac.com
+
+   POLL_INTERVAL_S=600
+   ```
+
+4. Reinicia el stack:
+
+   ```bash
+   docker compose down
+   docker compose up -d --build
+   ```
+
+5. Disparar manualmente y verificar:
+
+   ```bash
+   docker compose exec digest python -c "from main import run_digest; run_digest()"
+   ```
+
+El digest llegará a tu Gmail (`From: tucorreo@gmail.com`,
+`Reply-To: tu-inbox@mailsac.com`). Cuando respondas, la reply va a Mailsac; el
+listener la lee por API y te manda los PDFs.
+
+**Rate-limit Mailsac**: el plan gratis da 1500 calls/mes; con `POLL_INTERVAL_S=600`
+(10 min) gastas ~4320 calls/mes — sigue siendo bajo y deja margen para escalado.
+Para una demo en vivo, baja temporalmente a `30` durante la presentación.
 
 ## Apagar
 
@@ -175,6 +254,7 @@ docker compose down -v    # ademas borra los volumenes (estado limpio)
 ```
 arxiv-digest/
 ├── docker-compose.yml      # orquesta los 4 servicios
+├── .env.example            # plantilla de envs (copiar a .env)
 ├── filters.yml             # configuracion editable del filtro
 ├── .gitattributes          # normaliza fin de linea (LF)
 ├── digest/                 # servicio digest
@@ -194,7 +274,11 @@ arxiv-digest/
 ├── listener/               # servicio listener
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py             # poll a MailHog
+│   ├── main.py             # poll al backend de inbox configurado
+│   ├── inbox/              # backends de inbox (mailhog | mailsac)
+│   │   ├── base.py         # Protocol comun
+│   │   ├── mailhog.py      # cliente HTTP de MailHog
+│   │   └── mailsac.py      # cliente REST de Mailsac
 │   ├── reply_parser.py     # extrae numeros del reply
 │   ├── pdf_downloader.py   # baja los PDFs de arXiv
 │   ├── email_sender.py     # responde con adjuntos
