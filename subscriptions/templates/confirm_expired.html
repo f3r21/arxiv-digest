@@ -1,18 +1,19 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Link invalido o expirado</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body>
-  <main class="container narrow">
-    <h1>Hmm, este link no sirve.</h1>
-    <p>
-      El token de confirmacion expiro, ya fue usado, o esta mal formado.
-      Vuelve a suscribirte para recibir un nuevo enlace.
-    </p>
-    <p><a href="/">Volver al formulario</a></p>
-  </main>
-</body>
-</html>
+{% extends "_base.html" %}
+
+{% block title %}Link expired — The Daily Abstract{% endblock %}
+
+{% set narrow = true %}
+
+{% block content %}
+<section class="hero" aria-labelledby="exp-title">
+  <p class="hero-eyebrow">Hmm</p>
+  <h1 id="exp-title" class="hero-title">This link is expired or invalid.</h1>
+  <p class="hero-lead">
+    Confirmation links last 48 hours and can only be used once. Manage and
+    unsubscribe links require a valid token. Start a new subscription below.
+  </p>
+  <div class="btn-row">
+    <a href="/" class="btn primary">Subscribe again →</a>
+  </div>
+</section>
+{% endblock %}

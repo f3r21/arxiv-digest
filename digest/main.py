@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import schedule
@@ -37,6 +38,48 @@ logging.basicConfig(
 DIGEST_HOUR = os.environ.get("DIGEST_HOUR", "07:00")
 ARXIV_MAX_RESULTS = int(os.environ.get("ARXIV_MAX_RESULTS", "200"))
 ALIVE_FILE = Path("/tmp/alive")
+PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
+SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
+
+
+def _write_public_preview(issue: int, papers: list[dict]) -> None:
+    """Snapshot publico para /preview en la landing.
+
+    Toma los papers del seed subscriber (id=1) como muestra representativa
+    de "que recibis si te suscribis". Si el seed no recibio nada hoy, no
+    sobreescribe el anterior (mantiene el preview existente).
+    """
+    if not papers:
+        return
+    try:
+        PUBLIC_PREVIEW_PATH.write_text(
+            json.dumps(
+                {
+                    "issue": issue,
+                    "sent_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "is_mock": False,
+                    "papers": [
+                        {
+                            "arxiv_id": p.get("arxiv_id", ""),
+                            "title": p.get("title", ""),
+                            "authors": list(p.get("authors") or [])[:5],
+                            "abstract": p.get("abstract", ""),
+                            "match_reason": p.get("match_reason", ""),
+                        }
+                        for p in papers[:5]
+                    ],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        logger.info(
+            "RESULT: public preview escrito issue=%d papers=%d",
+            issue, len(papers),
+        )
+    except Exception as exc:
+        logger.error("ERROR: no se pudo escribir public preview: %s", exc)
 
 
 def _papers_for_subscriber(
@@ -102,6 +145,9 @@ def run_digest() -> None:
             mark_seen_for(sub.id, [p["arxiv_id"] for p in picked])
             total_sent += len(picked)
             sent_count += 1
+            # snapshot publico para /preview: si es el seed, lo usamos
+            if sub.id == SEED_SUBSCRIBER_ID:
+                _write_public_preview(issue, picked)
         except Exception as exc:
             logger.error(
                 "ERROR: sub=%s id=%d fallo: %s", sub.email, sub.id, exc

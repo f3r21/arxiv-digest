@@ -1,0 +1,99 @@
+{% extends "_base.html" %}
+
+{% block title %}Manage your Daily Abstract{% endblock %}
+
+{% block content %}
+
+<section class="hero" aria-labelledby="manage-title">
+  <p class="hero-eyebrow">Your subscription</p>
+  <h1 id="manage-title" class="hero-title">Manage your Daily Abstract</h1>
+  <p class="hero-lead">
+    Subscriber: <strong>{{ subscriber.email }}</strong>. Adjust categories,
+    keywords or daily cap. Changes take effect at the next edition.
+  </p>
+</section>
+
+{% if saved %}
+<p class="status success">✓ Changes saved.</p>
+{% endif %}
+
+<section aria-labelledby="manage-form-heading">
+  <div class="section-heading">
+    <h2 id="manage-form-heading">Edit subscription</h2>
+  </div>
+
+  <form id="manage-form" method="post" action="/manage?token={{ token }}" autocomplete="off">
+
+    <div class="form-row">
+      <label>
+        Quick presets
+        <span class="label-meta">— click to toggle category bundles</span>
+      </label>
+      <div class="presets" id="presets">
+        {% for p in presets %}
+        <button type="button" class="preset" data-preset-id="{{ p.id }}">
+          {{ p.label }}
+        </button>
+        {% endfor %}
+        <button type="button" class="preset" id="clear-cats">Clear all</button>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="cat-search">
+        Categories
+        <span class="label-meta">— <span id="selected-count">0</span> selected</span>
+      </label>
+      <input id="cat-search" type="search" placeholder="Search: cs.LG, transformer, optimization…">
+      <div id="cat-list" class="cat-list">
+        {% for group, items in grouped_categories.items() %}
+        <details class="cat-group" data-group="{{ group }}"
+                 {% if loop.index <= 2 or items|selectattr('code', 'in', selected_codes)|list %} open{% endif %}>
+          <summary>{{ group }} <span class="muted">· {{ items|length }}</span></summary>
+          <div class="cat-options">
+            {% for cat in items %}
+            <label class="cat-option" data-search="{{ cat.code|lower }} {{ cat.name|lower }}">
+              <input type="checkbox" name="categories" value="{{ cat.code }}"
+                     {% if cat.code in selected_codes %}checked{% endif %}>
+              <span class="code">{{ cat.code }}</span>
+              <span class="name">{{ cat.name }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="keywords">
+        Keywords filter
+        <span class="label-meta">— only include papers whose title or abstract mentions one of these</span>
+      </label>
+      <textarea id="keywords" name="keywords" rows="2"
+                placeholder="transformer, kubernetes, optimization">{{ keywords_str }}</textarea>
+      <p class="hint">Comma-separated. Empty = include all papers in your categories.</p>
+    </div>
+
+    <div class="form-row">
+      <label for="max_papers">Max papers per day</label>
+      <input id="max_papers" type="number" name="max_papers" value="{{ subscriber.max_papers }}" min="1" max="30">
+    </div>
+
+    <div class="btn-row">
+      <button type="submit" class="btn primary" id="submit-btn">Save changes</button>
+      <a href="{{ unsubscribe_url }}" class="muted" style="font-size: var(--text-sm);">
+        Or unsubscribe completely →
+      </a>
+    </div>
+  </form>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+window.__PRESETS__ = {{ presets_json|safe }};
+</script>
+<script src="/static/app.js"></script>
+{% endblock %}

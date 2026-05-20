@@ -1,0 +1,72 @@
+{% extends "_base.html" %}
+
+{% block title %}Terms — The Daily Abstract{% endblock %}
+
+{% block content %}
+
+<section class="hero" aria-labelledby="terms-title">
+  <p class="hero-eyebrow">Last updated · {{ today_label }}</p>
+  <h1 id="terms-title" class="hero-title">Terms of use</h1>
+</section>
+
+<article class="prose">
+  <p>
+    The Daily Abstract is offered for free, as-is, by an individual.
+    Here are the basic rules of the road.
+  </p>
+
+  <h2>What you get</h2>
+  <ul>
+    <li>A daily email digest of new arXiv papers matching the categories
+      and keywords you picked at subscription.</li>
+    <li>The ability to reply with paper numbers and receive the PDFs as
+      attachments.</li>
+    <li>A web interface to manage and unsubscribe at any time.</li>
+  </ul>
+
+  <h2>What we don't promise</h2>
+  <ul>
+    <li><strong>No uptime SLA.</strong> The service runs on a free-tier VM
+      and can go down. We do our best.</li>
+    <li><strong>No guarantee of delivery.</strong> Email goes through
+      third-party SMTP providers (Brevo) and can be rate-limited, throttled,
+      or marked as spam by your provider.</li>
+    <li><strong>No guarantee of arXiv coverage.</strong> The arXiv API
+      sometimes rate-limits requests; on those days the digest may be empty
+      or delayed.</li>
+    <li><strong>No warranty.</strong> We provide this service "as is".</li>
+  </ul>
+
+  <h2>Acceptable use</h2>
+  <ul>
+    <li>Use your own email. Don't subscribe other people.</li>
+    <li>Don't try to abuse the subscribe form (we'll block obvious abuse).</li>
+    <li>Don't scrape, automate or republish the digests at scale without
+      asking.</li>
+  </ul>
+
+  <h2>Open source</h2>
+  <p>
+    The code is open source on <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a>.
+    You can self-host your own instance and not depend on us at all.
+  </p>
+
+  <h2>Liability</h2>
+  <p>
+    In no event will the project owner be liable for any indirect,
+    incidental or consequential damages arising from use of the service.
+    Maximum aggregate liability: zero dollars (this is a free service).
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    We can update these terms at any time. Material changes will be
+    notified to active subscribers by email.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Write to the contact in the footer or open an issue on GitHub.
+  </p>
+</article>
+{% endblock %}

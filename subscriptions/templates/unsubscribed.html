@@ -1,14 +1,20 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Suscripcion cancelada</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body>
-  <main class="container narrow">
-    <h1>Suscripcion cancelada.</h1>
-    <p>Ya no vas a recibir el digest. Si cambias de idea, <a href="/">volve a suscribirte</a>.</p>
-  </main>
-</body>
-</html>
+{% extends "_base.html" %}
+
+{% block title %}Unsubscribed — The Daily Abstract{% endblock %}
+
+{% set narrow = true %}
+
+{% block content %}
+<section class="hero" aria-labelledby="unsub-title">
+  <p class="hero-eyebrow">Done</p>
+  <h1 id="unsub-title" class="hero-title">You're unsubscribed.</h1>
+  <p class="hero-lead">
+    No more editions of The Daily Abstract will arrive. If this was a mistake
+    or you change your mind, you're welcome back anytime — same email, same
+    setup.
+  </p>
+  <div class="btn-row">
+    <a href="/" class="btn primary">Subscribe again →</a>
+  </div>
+</section>
+{% endblock %}

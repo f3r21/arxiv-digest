@@ -1,0 +1,57 @@
+{% if standalone %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Today's Edition — The Daily Abstract</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body style="background: var(--bg); padding: 2rem 1rem;">
+  <div class="container narrow">
+{% endif %}
+<article class="preview-card" aria-label="Today's edition preview">
+  <header class="preview-card-header">
+    <div class="preview-card-eyebrow">The Daily Abstract</div>
+    <h3 class="preview-card-title">Today's Edition</h3>
+    <div class="preview-card-meta">
+      {% if preview.is_mock %}
+        Sample · {{ preview.papers|length }} papers
+      {% else %}
+        No. {{ preview.issue }} · {{ preview.sent_at[:10] if preview.sent_at else '' }} · {{ preview.papers|length }} papers
+      {% endif %}
+    </div>
+  </header>
+
+  {% if preview.papers %}
+  <div class="preview-card-section-label">Editor's Pick</div>
+  {% set p0 = preview.papers[0] %}
+  <div class="preview-card-paper">
+    <div class="preview-card-paper-number">01</div>
+    <h4>{{ p0.title }}</h4>
+    <div class="authors">{{ (p0.authors or [])|join(', ')|truncate(80) }}</div>
+    <p class="abstract">{{ p0.abstract|truncate(280) }}</p>
+  </div>
+
+  {% if preview.papers|length > 1 %}
+  <div class="preview-card-section-label">Also today</div>
+  {% for p in preview.papers[1:] %}
+  <div class="preview-card-paper">
+    <div class="preview-card-paper-number">{{ "%02d"|format(loop.index + 1) }}</div>
+    <h4>{{ p.title }}</h4>
+    <div class="authors">{{ (p.authors or [])|join(', ')|truncate(70) }}</div>
+    <p class="abstract">{{ p.abstract|truncate(180) }}</p>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% endif %}
+
+  {% if preview.is_mock %}
+  <div class="preview-fallback-note">
+    This is a sample. Real digests pull live arXiv papers in your selected categories.
+  </div>
+  {% endif %}
+</article>
+{% if standalone %}
+  </div>
+</body>
+</html>
+{% endif %}

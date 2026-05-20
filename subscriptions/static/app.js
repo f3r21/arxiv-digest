@@ -5,13 +5,26 @@
   const allOptions = list ? list.querySelectorAll('.cat-option') : [];
   const countEl = document.getElementById('selected-count');
   const clearBtn = document.getElementById('clear-cats');
-  const form = document.getElementById('subscribe-form');
+  const form = document.getElementById('subscribe-form') || document.getElementById('manage-form');
   const status = document.getElementById('form-status');
   const submitBtn = document.getElementById('submit-btn');
+  const presetsRoot = document.getElementById('presets');
+  const presets = (window.__PRESETS__ || []).reduce((acc, p) => {
+    acc[p.id] = new Set(p.codes);
+    return acc;
+  }, {});
+
+  function getChecked() {
+    if (!list) return new Set();
+    return new Set(
+      Array.from(list.querySelectorAll('input[name="categories"]:checked'))
+        .map((cb) => cb.value),
+    );
+  }
 
   function updateCount() {
-    const n = list ? list.querySelectorAll('input[name="categories"]:checked').length : 0;
-    if (countEl) countEl.textContent = String(n);
+    if (!countEl) return;
+    countEl.textContent = String(getChecked().size);
   }
 
   function applyFilter() {
@@ -24,23 +37,65 @@
     }
     const terms = q.split(/\s+/).filter(Boolean);
     groups.forEach((group) => {
-      let visibleInGroup = 0;
+      let visible = 0;
       group.querySelectorAll('.cat-option').forEach((opt) => {
         const hay = opt.dataset.search || '';
-        const match = terms.every((t) => hay.includes(t));
-        opt.classList.toggle('hidden', !match);
-        if (match) visibleInGroup += 1;
+        const ok = terms.every((t) => hay.includes(t));
+        opt.classList.toggle('hidden', !ok);
+        if (ok) visible += 1;
       });
-      group.style.display = visibleInGroup ? '' : 'none';
-      if (visibleInGroup) group.open = true;
+      group.style.display = visible ? '' : 'none';
+      if (visible) group.open = true;
     });
+  }
+
+  function syncPresetActiveStates() {
+    if (!presetsRoot) return;
+    const checked = getChecked();
+    presetsRoot.querySelectorAll('.preset[data-preset-id]').forEach((btn) => {
+      const id = btn.dataset.presetId;
+      const codes = presets[id];
+      if (!codes) return;
+      const allOn = Array.from(codes).every((c) => checked.has(c));
+      btn.classList.toggle('active', allOn);
+    });
+  }
+
+  function togglePreset(id) {
+    const codes = presets[id];
+    if (!codes || !list) return;
+    const checked = getChecked();
+    const allOn = Array.from(codes).every((c) => checked.has(c));
+    codes.forEach((code) => {
+      const cb = list.querySelector(`input[name="categories"][value="${code}"]`);
+      if (cb) cb.checked = !allOn;
+    });
+    // Abrir grupos donde caen las cats
+    list.querySelectorAll('.cat-group').forEach((group) => {
+      const matches = group.querySelectorAll(
+        'input[name="categories"]:checked',
+      ).length;
+      if (matches > 0) group.open = true;
+    });
+    updateCount();
+    syncPresetActiveStates();
   }
 
   if (search) search.addEventListener('input', applyFilter);
 
   if (list) {
     list.addEventListener('change', (e) => {
-      if (e.target && e.target.name === 'categories') updateCount();
+      if (e.target && e.target.name === 'categories') {
+        updateCount();
+        syncPresetActiveStates();
+      }
+    });
+  }
+
+  if (presetsRoot) {
+    presetsRoot.addEventListener('click', (e) => {
+      const btn = e.target.closest('.preset[data-preset-id]');
+      if (btn) togglePreset(btn.dataset.presetId);
     });
   }
 
@@ -50,36 +105,39 @@
         .querySelectorAll('input[name="categories"]:checked')
         .forEach((cb) => (cb.checked = false));
       updateCount();
+      syncPresetActiveStates();
     });
   }
 
-  if (form) {
+  if (form && form.id === 'subscribe-form') {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const checked = form.querySelectorAll('input[name="categories"]:checked');
-      if (checked.length === 0) {
-        showStatus('Elige al menos una categoria.', true);
+      const checked = getChecked();
+      if (checked.size === 0) {
+        showStatus('Pick at least one category (or use a preset).', true);
         return;
       }
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Enviando...';
+      submitBtn.textContent = 'Sending...';
       try {
         const data = new FormData(form);
         const resp = await fetch('/subscribe', { method: 'POST', body: data });
         if (resp.status === 202) {
+          const body = await resp.json();
           showStatus(
-            'Listo. Revisa tu correo y haz click en el link de confirmacion.',
+            `✓ Confirmation email sent to ${body.email}. Click the link inside to activate.`,
             false,
           );
           form.reset();
           updateCount();
+          syncPresetActiveStates();
         } else if (resp.status === 429) {
           showStatus(
-            'Demasiados intentos desde tu IP. Espera un rato y vuelve a intentar.',
+            'Too many attempts from your IP. Please wait a moment.',
             true,
           );
         } else {
-          let detail = 'Error al suscribirte.';
+          let detail = 'Subscription failed.';
           try {
             const body = await resp.json();
             if (body && body.detail) detail = body.detail;
@@ -87,10 +145,10 @@
           showStatus(detail, true);
         }
       } catch (err) {
-        showStatus('Error de red. Intentalo de nuevo.', true);
+        showStatus('Network error. Try again.', true);
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Suscribirme';
+        submitBtn.textContent = 'Confirm by email →';
       }
     });
   }
@@ -99,8 +157,12 @@
     if (!status) return;
     status.textContent = text;
     status.classList.toggle('error', !!isError);
+    status.classList.toggle('success', !isError);
     status.hidden = false;
+    status.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
+  // Init
   updateCount();
+  syncPresetActiveStates();
 })();

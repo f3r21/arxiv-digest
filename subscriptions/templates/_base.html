@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}The Daily Abstract{% endblock %}</title>
+  <meta name="description" content="{% block description %}Your morning briefing of new research. Pick your arXiv categories, get a curated digest, reply with numbers to receive the PDFs.{% endblock %}">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22 font-family=%22Georgia%22 fill=%22%23d99c5e%22>A</text></svg>">
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <p class="masthead-title"><a href="/">The Daily Abstract</a></p>
+      <p class="masthead-meta">{% block masthead_meta %}Daily edition · {{ today_label or '' }}{% endblock %}</p>
+    </div>
+  </header>
+
+  {% block main %}
+  <main class="container{% if narrow %} narrow{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+  {% endblock %}
+
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <div>
+        <div class="brand">The Daily Abstract</div>
+        <p class="tagline">An indie project. Open source. Self-hosted on a free-tier VM.</p>
+      </div>
+      <nav aria-label="Footer">
+        <ul>
+          <li><a href="/privacy">Privacy</a></li>
+          <li><a href="/terms">Terms</a></li>
+          <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+        </ul>
+      </nav>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

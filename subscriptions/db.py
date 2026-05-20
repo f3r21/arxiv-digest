@@ -176,6 +176,36 @@ def get_subscriber_by_id(subscriber_id: int) -> Subscriber | None:
     return _row_to_subscriber(row) if row else None
 
 
+def update_subscription_for(
+    subscriber_id: int,
+    categories: list[str],
+    keywords: list[str],
+    max_papers: int,
+) -> bool:
+    """Actualiza categories/keywords/max_papers de un suscriptor activo.
+
+    Devuelve True si actualizo, False si el suscriptor no existe o ya
+    esta dado de baja.
+    """
+    with _conn() as c:
+        cur = c.execute(
+            """
+            UPDATE subscribers
+            SET categories_json = ?,
+                keywords_json   = ?,
+                max_papers      = ?
+            WHERE id = ? AND unsubscribed_at IS NULL
+            """,
+            (
+                json.dumps(categories),
+                json.dumps(keywords),
+                int(max_papers),
+                subscriber_id,
+            ),
+        )
+        return cur.rowcount > 0
+
+
 def store_pending(
     token_hash: str, email: str, payload: dict, ip: str | None
 ) -> None:

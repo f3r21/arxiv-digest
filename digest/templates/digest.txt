@@ -1,5 +1,5 @@
 ================================================
-   arXiv Daily  -  No. {{ issue }}  -  {{ date }}
+   THE DAILY ABSTRACT  -  No. {{ issue }}  -  {{ date }}
                   {{ category_label }}
 ================================================
 
@@ -37,14 +37,14 @@ Responde con los numeros para recibir los PDFs.
 {% endif %}
 {% if omitted %}
 
-(+ {{ omitted }} papers omitidos por el cap de filters.yml.)
+(+ {{ omitted }} papers omitidos.)
 {% endif %}
 
 ------------------------------------------------
-            arXiv Daily   -   {{ category_label }}
+          THE DAILY ABSTRACT  -  {{ category_label }}
    responde con los numeros para los PDFs
 ------------------------------------------------
 
-Te suscribiste como {{ subscriber_email }}.
-Para darte de baja:
-  {{ unsubscribe_url }}
+Suscrito como {{ subscriber_email }}.
+Manage subscription:  {{ manage_url }}
+Unsubscribe:          {{ unsubscribe_url }}

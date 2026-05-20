@@ -1,13 +1,16 @@
-Hola,
+THE DAILY ABSTRACT
+==================
 
-Recibimos una solicitud de suscripcion al arXiv Daily para {{ email }}.
+You're one click away from receiving The Daily Abstract at
+{{ email }}.
 
-Categorias elegidas:
+Categories you selected:
 {% for c in categories %}  - {{ c }}
 {% endfor %}
-Para confirmar y empezar a recibir el digest, abre este link
-(valido por 48 horas):
+To confirm and start receiving the daily edition, open this link
+(valid for 48 hours):
 
   {{ confirm_url }}
 
-Si no fuiste tu, ignora este mensaje y la suscripcion no se activa.
+If this wasn't you, ignore this email and the subscription will not
+activate.

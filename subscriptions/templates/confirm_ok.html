@@ -1,21 +1,31 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8">
-  <title>Suscripcion confirmada</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
-<body>
-  <main class="container narrow">
-    <h1>Listo.</h1>
-    <p>
-      Confirmamos <strong>{{ email }}</strong> para las categorias:
-    </p>
-    <ul>
-      {% for c in categories %}<li><code>{{ c }}</code></li>{% endfor %}
-    </ul>
-    <p>El proximo digest te llega en la siguiente corrida diaria.</p>
-    <p><a href="/">Suscribir otro email</a></p>
-  </main>
-</body>
-</html>
+{% extends "_base.html" %}
+
+{% block title %}Welcome to The Daily Abstract{% endblock %}
+
+{% set narrow = true %}
+
+{% block content %}
+<section class="hero" aria-labelledby="ok-title">
+  <p class="hero-eyebrow">You're in</p>
+  <h1 id="ok-title" class="hero-title">Welcome to The Daily Abstract.</h1>
+  <p class="hero-lead">
+    Confirmed <strong>{{ email }}</strong>. The next edition lands in your
+    inbox at 7am with new papers in:
+  </p>
+</section>
+
+<section>
+  <div class="cat-selected-summary">
+    {% for c in categories %}<span class="pill">{{ c }}</span>{% endfor %}
+  </div>
+
+  <p class="muted">
+    Want to fine-tune? Every digest has a "Manage subscription" link in the
+    footer. {% if manage_url %}You can also <a href="{{ manage_url }}">manage now →</a>.{% endif %}
+  </p>
+
+  <div class="btn-row">
+    <a href="/" class="btn ghost">Back to home</a>
+  </div>
+</section>
+{% endblock %}

@@ -13,6 +13,7 @@ CONFIRM_TTL_HOURS = int(os.environ.get("CONFIRM_TTL_HOURS", "48"))
 
 _confirm = URLSafeTimedSerializer(SECRET, salt="confirm")
 _unsub = URLSafeTimedSerializer(SECRET, salt="unsubscribe")
+_manage = URLSafeTimedSerializer(SECRET, salt="manage")
 
 
 def make_confirm_token(email: str) -> str:
@@ -40,5 +41,16 @@ def make_unsubscribe_token(subscriber_id: int) -> str:
 def read_unsubscribe_token(token: str) -> int | None:
     try:
         return int(_unsub.loads(token))
+    except (BadSignature, ValueError, TypeError):
+        return None
+
+
+def make_manage_token(subscriber_id: int) -> str:
+    return _manage.dumps(int(subscriber_id))
+
+
+def read_manage_token(token: str) -> int | None:
+    try:
+        return int(_manage.loads(token))
     except (BadSignature, ValueError, TypeError):
         return None
