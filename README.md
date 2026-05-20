@@ -9,22 +9,35 @@ Proyecto del curso **CS3P2 Cloud Computing** — caso de uso de Docker.
 
 ## Arquitectura
 
-Tres servicios orquestados por `docker-compose.yml`:
+Cuatro servicios orquestados por `docker-compose.yml`:
 
 ```
                    +-------------------+
-   arXiv API ---->  |  digest           |  --SMTP-->  +-----------+
-   (export)         |  scheduler diario |             |  mailhog  |
-                    +-------------------+             |  (buzon)  |
-                                                      +-----------+
-   arXiv PDFs <----  +-------------------+  <--poll API---/  |
+   arXiv API ---->  |  digest           |  --HTTP--> +--------------+
+   (export)         |  scheduler diario |            |  translator  | --HTTPS--> MyMemory
+                    +-------------------+            +--------------+
+                            | SMTP
+                            v
+                    +-----------+
+                    |  mailhog  |
+                    |  (buzon)  |
+                    +-----------+
+                            ^
+   arXiv PDFs <----  +-------------------+  <--poll API---/
                      |  listener         |  --SMTP (reply + PDFs)--> mailhog
                      |  procesa replies  |
                      +-------------------+
 ```
 
 - **digest** — cada día consulta arXiv, filtra por `filters.yml`, deduplica
-  contra lo ya enviado y manda el digest por email.
+  contra lo ya enviado, pide al `translator` traducir los papers que pasaron el
+  filtro y manda el digest por email.
+- **translator** — microservicio FastAPI interno; expone `POST /translate` y
+  llama a la API pública de [MyMemory](https://mymemory.translated.net/doc/spec.php)
+  (de la lista [public-apis](https://github.com/public-apis/public-apis)). Sin
+  API key. Hace chunking por oración para respetar el límite de ~500 bytes por
+  query y cachea en memoria. Si MyMemory falla, devuelve el texto original (el
+  digest sigue saliendo en inglés).
 - **listener** — hace polling a la API de MailHog; cuando ve un reply con
   números, descarga esos PDFs de arXiv y responde con los adjuntos.
 - **mailhog** — servidor SMTP de prueba con interfaz web; hace de buzón. No sale
@@ -106,6 +119,23 @@ docker compose exec listener python /tmp/send_test_reply.py "1 3 5"
 
 El listener hace polling cada 30 s; espera ese tiempo y revisa MailHog.
 
+## Traducción al español
+
+El servicio `translator` traduce título y abstract de cada paper a español antes
+del envío. Configuración relevante en `docker-compose.yml`:
+
+- **Subir cuota gratuita**: MyMemory da ~5000 chars/día por IP sin email, y
+  ~50000 chars/día si pones tu correo. Edita `translator.environment`:
+
+  ```yaml
+  MYMEMORY_EMAIL: "tucorreo@example.com"
+  ```
+
+- **Desactivar el translator**: quita la variable `TRANSLATOR_URL` del bloque
+  `digest.environment` (o ponla en `""`). El digest sale en inglés sin tocar
+  ningún otro código. También puedes bajar solo ese contenedor:
+  `docker compose stop translator`.
+
 ## Editar el filtro
 
 Edita `filters.yml` (categoría de arXiv, máximo de papers, keywords y autores).
@@ -144,7 +174,7 @@ docker compose down -v    # ademas borra los volumenes (estado limpio)
 
 ```
 arxiv-digest/
-├── docker-compose.yml      # orquesta los 3 servicios
+├── docker-compose.yml      # orquesta los 4 servicios
 ├── filters.yml             # configuracion editable del filtro
 ├── .gitattributes          # normaliza fin de linea (LF)
 ├── digest/                 # servicio digest
@@ -153,9 +183,14 @@ arxiv-digest/
 │   ├── main.py             # scheduler + run_digest()
 │   ├── arxiv_client.py     # consulta la API de arXiv
 │   ├── filter_engine.py    # aplica filters.yml
+│   ├── translator_client.py# llama al servicio translator
 │   ├── email_sender.py     # arma y envia el digest
 │   ├── shared_state.py     # SQLite + snapshot del digest
 │   └── templates/digest.txt
+├── translator/             # servicio translator (FastAPI + MyMemory)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── main.py             # POST /translate, chunking, cache
 ├── listener/               # servicio listener
 │   ├── Dockerfile
 │   ├── requirements.txt
