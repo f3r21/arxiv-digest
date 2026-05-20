@@ -58,20 +58,23 @@ def test_subscribe_rejects_only_invalid_categories(client):
 
 
 def test_subscribe_rejects_too_many_categories(client):
-    """21 categorias debe fallar (limit es 20). Aceptamos cualquier 4xx:
-    el rechazo puede venir de slowapi (429), FastAPI (422) o nuestro 400.
-    """
+    """21 categorias validas debe pegar nuestro check de 400."""
     c, _ = client
-    payload = [("email", "x@example.com")]
-    payload += [("categories", code) for code in [
-        "cs.AI", "cs.DC", "cs.LG", "cs.CL", "cs.CR", "cs.CV",
-        "cs.DB", "cs.DS", "cs.GT", "cs.HC", "cs.IT", "cs.LO",
-        "cs.NE", "cs.NI", "cs.OS", "cs.PL", "cs.RO", "cs.SC",
-        "cs.SE", "cs.SI", "cs.SY",
-    ]]
-    payload.append(("max_papers", "10"))
-    r = c.post("/subscribe", data=payload)
-    assert 400 <= r.status_code < 500, r.text
+    r = c.post(
+        "/subscribe",
+        data={
+            "email": "many-cats@example.com",
+            "categories": [
+                "cs.AI", "cs.DC", "cs.LG", "cs.CL", "cs.CR", "cs.CV",
+                "cs.DB", "cs.DS", "cs.GT", "cs.HC", "cs.IT", "cs.LO",
+                "cs.NE", "cs.NI", "cs.OS", "cs.PL", "cs.RO", "cs.SC",
+                "cs.SE", "cs.SI", "cs.SY",
+            ],
+            "max_papers": "10",
+        },
+    )
+    assert r.status_code == 400, r.text
+    assert "20 categorias" in r.json()["detail"]
 
 
 def test_subscribe_clamps_max_papers(client, monkeypatch):

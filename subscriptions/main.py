@@ -6,12 +6,13 @@ Double opt-in: POST /subscribe -> email con token -> GET /confirm activa.
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, AsyncIterator
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
@@ -43,7 +44,19 @@ STATIC_DIR = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(title="arxiv-digest subscriptions")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Startup: init DB, catalog, seed; shutdown: nada que cerrar."""
+    db.init_db()
+    cats.load()
+    seed_from_env()
+    logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)
+    yield
+
+
+app = FastAPI(title="arxiv-digest subscriptions", lifespan=lifespan)
 app.state.limiter = limiter
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -54,14 +67,6 @@ async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded) -> JSON
         status_code=429,
         content={"error": "rate_limit_exceeded", "detail": str(exc.detail)},
     )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    db.init_db()
-    cats.load()
-    seed_from_env()
-    logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)
 
 
 def seed_from_env() -> None:

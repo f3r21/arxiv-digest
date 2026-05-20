@@ -10,6 +10,9 @@ os.environ.setdefault(
     "0" * 64,
 )
 os.environ.setdefault("CONFIRM_TTL_HOURS", "48")
+# Rate-limit alto para que los tests no se choquen entre si dentro de la
+# misma "hora" del limiter en memoria.
+os.environ.setdefault("SUBSCRIBE_RATE_PER_HOUR", "10000")
 
 # Permitir imports de los modulos del servicio
 ROOT = Path(__file__).resolve().parent.parent
