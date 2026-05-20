@@ -1,15 +1,24 @@
-# arxiv-digest
+# The Daily Abstract
+
+> *Your morning briefing of new research, in your inbox by 7am.*
 
 Sistema multi-usuario que envía un digest diario de papers nuevos
 de [arXiv](https://arxiv.org) a cada suscriptor con **sus propias categorías**
 y keywords. Respondes el email con los números de los papers que te interesan
-y el sistema te devuelve esos PDFs como adjuntos. Todo corre en contenedores
-con `docker compose`.
+y el sistema te devuelve esos PDFs como adjuntos.
 
 Cualquiera se suscribe desde un formulario web (con double opt-in) y elige
-entre todas las categorías oficiales de arXiv (cs.\*, math.\*, stat.\*, etc.).
+entre todas las **155 categorías oficiales de arXiv** (cs.\*, math.\*,
+stat.\*, etc.) o usa **presets curados** (Machine Learning, Distributed
+Systems, Theory, NLP, Computer Vision, Security, Robotics).
 
-Proyecto del curso **CS3P2 Cloud Computing** — caso de uso de Docker.
+- **Producto en vivo:** `https://arxivdaily.ignorelist.com` (Oracle Cloud
+  Free Tier, AMD E2.1.Micro, 1 GB RAM)
+- **Repo:** open source, MIT, self-hosteable end-to-end gratis
+- **Stack:** 6 contenedores Docker (FastAPI + Caddy + Jinja + SQLite),
+  ~165 MB de RAM en idle
+- **Identidad visual:** ver [`docs/DESIGN_BRIEF.md`](docs/DESIGN_BRIEF.md)
+- Proyecto del curso **CS3P2 Cloud Computing** — caso de uso de Docker.
 
 ## Arquitectura
 
