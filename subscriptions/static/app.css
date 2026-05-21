@@ -50,7 +50,7 @@
     /* Misc */
     --radius-sm: 3px;
     --radius-md: 6px;
-    --content-max: 720px;
+    --content-max: 1080px;
     --sidebar-w: 240px;
     --shell-pad: clamp(1.5rem, 2vw + 0.5rem, 3rem);
     --rule: 1px solid var(--border);
@@ -98,7 +98,7 @@
     display: grid;
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
     gap: clamp(2rem, 4vw, 4rem);
-    max-width: 1180px;
+    max-width: 1440px;
     margin: 0 auto;
     padding: 0 var(--shell-pad);
     min-height: 100vh;
@@ -1346,7 +1346,9 @@
   /* --- Hero newspaper deck --- */
   body.hero-deck-on .hero-kicker { display: block; }
   body.hero-deck-on .hero-deck-line { display: block; }
-  body.hero-deck-on .eyebrow { display: none; }
+  /* Only hide the eyebrow when a kicker replaces it (landing hero).
+     Without :has() scoping, non-landing pages lose their eyebrow with no replacement. */
+  body.hero-deck-on .eyebrow:has(+ .hero-kicker) { display: none; }
   body.hero-deck-on .hero-title {
     font-size: clamp(2rem, 1.2rem + 3vw, 3.6rem);
     max-width: 18ch;

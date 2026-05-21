@@ -81,7 +81,7 @@
 
             <header class="pv-head">
               <div class="pv-masthead">The Daily Abstract</div>
-              <h2 class="pv-h1">Hoy en arXiv</h2>
+              <p class="pv-h1">Hoy en arXiv</p>
               <div class="pv-cats" id="pv-cats">cs.LG · cs.AI · stat.ML</div>
               <div class="pv-issue" id="pv-issue">Muestra<span class="dot">·</span>18 May 2026</div>
             </header>
@@ -403,4 +403,35 @@
         <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
       </div>
     </footer>
+{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What does The Daily Abstract cost?",
+      "acceptedAnswer": {"@type":"Answer","text":"Nothing. The whole stack runs on Oracle Cloud's always-free tier. The basic digest stays free, forever."}
+    },
+    {
+      "@type": "Question",
+      "name": "How does the reply-to-PDF feature work?",
+      "acceptedAnswer": {"@type":"Answer","text":"Every digest is sent with Reply-To pointing at a monitored inbox. Reply with the paper numbers you want; the PDFs come back as email attachments, usually within thirty seconds."}
+    },
+    {
+      "@type": "Question",
+      "name": "Who runs The Daily Abstract?",
+      "acceptedAnswer": {"@type":"Answer","text":"An indie open-source project, MIT-licensed, self-hostable. No company, no investors, no ads."}
+    },
+    {
+      "@type": "Question",
+      "name": "How do I cancel my subscription?",
+      "acceptedAnswer": {"@type":"Answer","text":"Every email has a one-click unsubscribe link in the footer, plus a List-Unsubscribe header. You can also reply STOP."}
+    }
+  ]
+}
+</script>
 {% endblock %}

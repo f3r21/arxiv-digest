@@ -196,14 +196,9 @@
   });
 
   /* ====================================================================
-     FORM SUBMIT
-  ==================================================================== */
-  const form = document.getElementById('subscribe-form');
-  const status = document.getElementById('form-status');
-  const submitBtn = document.getElementById('submit-btn');
-
-  /* Client-side guard: block empty-category submissions before POST.
-     The actual subscribe POST is handled by the FastAPI backend at /subscribe.
+     FORM SUBMIT — client-side guard only
+     The actual POST to /subscribe (or /manage) is handled by FastAPI;
+     the browser POSTs naturally when validation passes.
   ==================================================================== */
   const form = document.getElementById('subscribe-form');
   if (form) {

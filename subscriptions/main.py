@@ -15,7 +15,7 @@ from typing import Annotated, AsyncIterator
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from slowapi import Limiter
@@ -125,10 +125,18 @@ def _today_label() -> str:
 
 
 def _common_ctx(request: Request, **extra) -> dict:
-    """Context compartido para todos los templates (masthead, footer, etc.)."""
+    """Context compartido para todos los templates (masthead, footer, etc.).
+
+    `canonical_url` se construye respetando PUBLIC_BASE_URL (no `request.url`,
+    que detras de un reverse proxy resuelve al hostname interno y rompe los
+    previews de OG/Twitter cards).
+    """
+    canonical_url = f"{PUBLIC_BASE_URL}{request.url.path}"
     return {
         "request": request,
         "today_label": _today_label(),
+        "canonical_url": canonical_url,
+        "public_base_url": PUBLIC_BASE_URL,
         **extra,
     }
 
@@ -136,6 +144,37 @@ def _common_ctx(request: Request, **extra) -> dict:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+def robots_txt() -> str:
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /confirm\n"
+        "Disallow: /manage\n"
+        "Disallow: /unsubscribe\n"
+        "Disallow: /admin/\n"
+        "Disallow: /health\n"
+        "Disallow: /categories.json\n"
+        "Disallow: /presets.json\n"
+        "\n"
+        f"Sitemap: {PUBLIC_BASE_URL}/sitemap.xml\n"
+    )
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml() -> Response:
+    base = PUBLIC_BASE_URL
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f'  <url><loc>{base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
+        f'  <url><loc>{base}/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+        f'  <url><loc>{base}/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
+        "</urlset>\n"
+    )
+    return Response(content=xml, media_type="application/xml")
 
 
 @app.get("/categories.json")
