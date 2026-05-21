@@ -1,0 +1,50 @@
+{% extends "_base.html" %}
+{% block title %}{{ category }} — {{ category_name }} — The Daily Abstract archive{% endblock %}
+{% block folio_label %}Archive · {{ category }}{% endblock %}
+{% block description %}Archive of daily arXiv editions in {{ category }} ({{ category_name }}) — {{ editions|length }} past editions.{% endblock %}
+{% block og_description %}A daily archive of new arXiv papers in {{ category }} ({{ category_name }}). Updated every morning.{% endblock %}
+{% block head_extra %}
+<link rel="alternate" type="application/atom+xml" title="The Daily Abstract — {{ category }}" href="/archive/{{ category }}/feed.xml">
+{% endblock %}
+{% block content %}
+
+<section class="hero" aria-labelledby="hero-title">
+  <p class="eyebrow">arXiv {{ category }}</p>
+  <h1 id="hero-title" class="hero-title">{{ category_name }} <em>daily digest</em>.</h1>
+  <p class="hero-lead">
+    {% if editions %}
+    {{ editions|length }} past editions, oldest first by date.
+    {% else %}
+    No editions archived yet for <code>{{ category }}</code>. The archive grows
+    as the daily digest runs each morning at 7am.
+    {% endif %}
+    <span class="muted-inline">
+      <a href="/archive/{{ category }}/feed.xml">Atom feed →</a>
+      &nbsp;·&nbsp;
+      <a href="/archive">all categories</a>
+    </span>
+  </p>
+</section>
+
+{% if editions %}
+<section aria-labelledby="editions-heading">
+  <div class="section-heading">
+    <h2 id="editions-heading"><span class="sec-num">01 —</span> <span class="sec-name">Past editions</span></h2>
+    <span class="section-sub">most recent first</span>
+  </div>
+
+  <ul style="list-style: none; padding: 0;">
+    {% for e in editions %}
+    <li style="border-bottom: var(--rule); padding: var(--space-3) 0;">
+      <a href="/archive/{{ category }}/{{ e.date }}" style="text-decoration: none; display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: baseline;">
+        <span style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-muted);">{{ e.date }}</span>
+        <span style="font-family: var(--font-serif); font-size: var(--text-lg); color: var(--text);">{{ e.first_title|truncate(80) }}</span>
+        <span class="muted" style="font-family: var(--font-mono); font-size: var(--text-xs);">{{ e.paper_count }} papers · No. {{ e.issue }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "_base.html" %}
+{% block title %}{{ category }} edition — {{ date_str }} — The Daily Abstract{% endblock %}
+{% block folio_label %}Archive · {{ category }} · {{ date_str }}{% endblock %}
+{% block description %}{{ papers|length }} new arXiv papers in {{ category }} ({{ category_name }}) for {{ date_str }} — The Daily Abstract archive edition.{% endblock %}
+{% block og_description %}New arXiv papers in {{ category }} for {{ date_str }}. {{ papers|length }} papers — see titles, authors, abstracts, links to PDFs.{% endblock %}
+{% block content %}
+
+<section class="hero" aria-labelledby="hero-title">
+  <p class="eyebrow">{{ category }} · {{ date_str }} · No. {{ issue }}</p>
+  <h1 id="hero-title" class="hero-title">{{ category_name }}, <em>{{ date_str }}</em>.</h1>
+  <p class="hero-lead">
+    {{ papers|length }} new papers in <code>{{ category }}</code>. Titles, authors,
+    abstracts. Links to arXiv. <span class="muted-inline">Want this in your inbox every morning? <a href="/#subscribe">Subscribe →</a></span>
+  </p>
+</section>
+
+<section aria-labelledby="papers-heading">
+  <div class="section-heading">
+    <h2 id="papers-heading"><span class="sec-num">01 —</span> <span class="sec-name">The papers</span></h2>
+    <span class="section-sub">{{ papers|length }} entries</span>
+  </div>
+
+  <ol style="list-style: none; padding: 0; counter-reset: paper;">
+    {% for p in papers %}
+    <li id="{{ p.arxiv_id }}" style="counter-increment: paper; border-bottom: var(--rule); padding: var(--space-4) 0;">
+      <div style="display: grid; grid-template-columns: 3em 1fr; gap: var(--space-3);">
+        <div style="font-family: var(--font-serif); font-size: var(--text-xl); font-weight: 700; color: var(--accent);">{{ "%02d"|format(loop.index) }}</div>
+        <div>
+          <h3 style="font-family: var(--font-serif); font-size: var(--text-lg); margin: 0 0 var(--space-2); color: var(--text);">
+            <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" target="_blank" rel="noopener" style="color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--text-faint);">{{ p.title }}</a>
+          </h3>
+          <p class="muted" style="font-size: var(--text-sm); margin: 0 0 var(--space-2);">{{ (p.authors or [])|join(', ')|truncate(120) }}</p>
+          {% if p.categories %}
+          <p style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-faint); margin: 0 0 var(--space-3);">
+            {{ p.categories|join(' · ') }}
+          </p>
+          {% endif %}
+          <p style="font-size: var(--text-sm); line-height: 1.6; color: var(--text); margin: 0 0 var(--space-2);">{{ p.abstract|truncate(450) }}</p>
+          <p style="font-size: var(--text-xs); font-family: var(--font-mono); color: var(--text-muted); margin: 0;">
+            <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" target="_blank" rel="noopener" style="color: var(--accent); text-decoration: none;">arxiv.org/abs/{{ p.arxiv_id }}</a>
+            <span class="sep">·</span>
+            <a href="{{ p.pdf_url }}" target="_blank" rel="noopener" style="color: var(--accent); text-decoration: none;">PDF</a>
+          </p>
+        </div>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<p class="muted" style="margin-top: var(--space-section); text-align: center; font-style: italic;">
+  This edition is part of <a href="/archive/{{ category }}">The Daily Abstract — {{ category }} archive</a>.
+  Subscribe to receive these in your inbox each morning, automatically translated to Spanish,
+  with reply-to-PDF: <a href="/#subscribe">arxivdaily.ignorelist.com</a>.
+</p>
+
+{% endblock %}
+
+{% block jsonld %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Blog",
+  "name": "The Daily Abstract — {{ category }} digest",
+  "url": "{{ public_base_url }}/archive/{{ category }}",
+  "blogPost": [
+    {% for p in papers %}
+    {
+      "@type": "BlogPosting",
+      "headline": {{ p.title|tojson }},
+      "author": {"@type": "Person", "name": {{ (p.authors[0] if p.authors else 'Unknown')|tojson }}},
+      "datePublished": {{ (p.published[:10] if p.published else date_str)|tojson }},
+      "url": "{{ public_base_url }}/archive/{{ category }}/{{ date_str }}#{{ p.arxiv_id }}",
+      "mainEntityOfPage": "{{ public_base_url }}/archive/{{ category }}/{{ date_str }}",
+      "abstract": {{ p.abstract|truncate(300)|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+{% endblock %}

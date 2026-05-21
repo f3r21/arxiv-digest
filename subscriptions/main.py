@@ -22,6 +22,7 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+import archive_repo
 import categories_catalog as cats
 import db
 import email_outbound
@@ -166,15 +167,24 @@ def robots_txt() -> str:
 @app.get("/sitemap.xml")
 def sitemap_xml() -> Response:
     base = PUBLIC_BASE_URL
-    xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f'  <url><loc>{base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n'
-        f'  <url><loc>{base}/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
-        f'  <url><loc>{base}/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>\n'
-        "</urlset>\n"
-    )
-    return Response(content=xml, media_type="application/xml")
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f'  <url><loc>{base}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>',
+        f'  <url><loc>{base}/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>',
+        f'  <url><loc>{base}/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>',
+        f'  <url><loc>{base}/archive</loc><changefreq>daily</changefreq><priority>0.8</priority></url>',
+    ]
+    for category, _n in archive_repo.list_categories():
+        lines.append(
+            f'  <url><loc>{base}/archive/{category}</loc><changefreq>daily</changefreq><priority>0.7</priority></url>'
+        )
+        for date_str in archive_repo.list_editions(category):
+            lines.append(
+                f'  <url><loc>{base}/archive/{category}/{date_str}</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>'
+            )
+    lines.append("</urlset>")
+    return Response(content="\n".join(lines) + "\n", media_type="application/xml")
 
 
 @app.get("/categories.json")
@@ -501,6 +511,158 @@ def terms_page(request: Request) -> HTMLResponse:
 
 
 # === Admin debug ===
+
+
+# === Archive ===
+
+
+_CATEGORY_NAMES: dict[str, str] = {}
+
+
+def _category_name(code: str) -> str:
+    """Lookup human-readable category name (cached)."""
+    if not _CATEGORY_NAMES:
+        for e in cats.load():
+            _CATEGORY_NAMES[e["code"]] = e["name"]
+    return _CATEGORY_NAMES.get(code, code)
+
+
+@app.get("/archive", response_class=HTMLResponse)
+def archive_index(request: Request) -> HTMLResponse:
+    """Index general: lista de categorias con archive, agrupadas por arXiv group."""
+    cats_with_counts = archive_repo.list_categories()
+    grouped: dict[str, list[dict]] = {}
+    catalog_lookup = {e["code"]: e for e in cats.load()}
+    for code, n in cats_with_counts:
+        entry = catalog_lookup.get(code, {"code": code, "name": code, "group": "Other"})
+        group = entry["group"]
+        grouped.setdefault(group, []).append(
+            {"code": code, "name": entry["name"], "count": n}
+        )
+    return templates.TemplateResponse(
+        "archive_index.html",
+        _common_ctx(request, grouped_archive=grouped, total_categories=len(cats_with_counts)),
+    )
+
+
+@app.get("/archive/{category}", response_class=HTMLResponse)
+def archive_category(request: Request, category: str) -> HTMLResponse:
+    """Lista chronologica de ediciones para una categoria."""
+    if not cats.is_valid_code(category):
+        raise HTTPException(status_code=404, detail="unknown arXiv category")
+    dates = archive_repo.list_editions(category)
+    if not dates:
+        # Categoria valida pero sin archive (aun)
+        return templates.TemplateResponse(
+            "archive_category.html",
+            _common_ctx(
+                request,
+                category=category,
+                category_name=_category_name(category),
+                editions=[],
+            ),
+            status_code=200,
+        )
+    # Cargar preview (titulo paper #1) de cada edicion para listing
+    editions = []
+    for d in dates:
+        ed = archive_repo.load_edition(category, d)
+        if ed is None:
+            continue
+        editions.append(
+            {
+                "date": d,
+                "issue": ed.issue,
+                "paper_count": len(ed.papers),
+                "first_title": ed.papers[0]["title"] if ed.papers else "",
+            }
+        )
+    return templates.TemplateResponse(
+        "archive_category.html",
+        _common_ctx(
+            request,
+            category=category,
+            category_name=_category_name(category),
+            editions=editions,
+        ),
+    )
+
+
+@app.get("/archive/{category}/feed.xml")
+def archive_feed(category: str) -> Response:
+    """Atom feed: ultimas N ediciones de la categoria."""
+    if not cats.is_valid_code(category):
+        raise HTTPException(status_code=404, detail="unknown arXiv category")
+    base = PUBLIC_BASE_URL
+    cat_name = _category_name(category)
+    dates = archive_repo.list_editions(category, limit=20)
+    entries: list[str] = []
+    for d in dates:
+        ed = archive_repo.load_edition(category, d)
+        if ed is None:
+            continue
+        title = f"The Daily Abstract — {category} — {d}"
+        permalink = f"{base}/archive/{category}/{d}"
+        # Build a short HTML summary
+        summary_lines = [f"<p>{len(ed.papers)} papers in {category} for {d}.</p><ol>"]
+        for p in ed.papers[:10]:
+            t = (p.get("title") or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            arxiv_id = p.get("arxiv_id", "")
+            summary_lines.append(
+                f'<li>{t} — <a href="https://arxiv.org/abs/{arxiv_id}">arxiv:{arxiv_id}</a></li>'
+            )
+        summary_lines.append("</ol>")
+        summary = "".join(summary_lines).replace("]]>", "]]&gt;")
+        entries.append(
+            f'<entry>\n'
+            f'  <title>{title}</title>\n'
+            f'  <link href="{permalink}"/>\n'
+            f'  <id>{permalink}</id>\n'
+            f'  <updated>{ed.generated_at or d + "T00:00:00Z"}</updated>\n'
+            f'  <summary type="html"><![CDATA[{summary}]]></summary>\n'
+            f'</entry>'
+        )
+    updated = dates[0] + "T00:00:00Z" if dates else "1970-01-01T00:00:00Z"
+    feed_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<feed xmlns="http://www.w3.org/2005/Atom">\n'
+        f'  <title>The Daily Abstract — {cat_name} ({category})</title>\n'
+        f'  <link href="{base}/archive/{category}"/>\n'
+        f'  <link rel="self" href="{base}/archive/{category}/feed.xml"/>\n'
+        f'  <id>{base}/archive/{category}</id>\n'
+        f'  <updated>{updated}</updated>\n'
+        f'  <subtitle>Daily archive of new arXiv papers in {category}.</subtitle>\n'
+        + "\n".join(entries)
+        + '\n</feed>\n'
+    )
+    return Response(content=feed_xml, media_type="application/atom+xml")
+
+
+@app.get("/archive/{category}/{date_str}", response_class=HTMLResponse)
+def archive_edition(
+    request: Request, category: str, date_str: str
+) -> HTMLResponse:
+    """Edicion completa: lista de papers para esa (categoria, fecha).
+
+    IMPORTANTE: este route va DESPUES de /archive/{category}/feed.xml para
+    que feed.xml no se interprete como {date_str}.
+    """
+    if not cats.is_valid_code(category):
+        raise HTTPException(status_code=404, detail="unknown arXiv category")
+    ed = archive_repo.load_edition(category, date_str)
+    if ed is None:
+        raise HTTPException(status_code=404, detail="edition not found")
+    return templates.TemplateResponse(
+        "archive_edition.html",
+        _common_ctx(
+            request,
+            category=category,
+            category_name=_category_name(category),
+            date_str=ed.date_str,
+            issue=ed.issue,
+            papers=ed.papers,
+        ),
+    )
 
 
 @app.get("/admin/subscribers", response_class=JSONResponse)

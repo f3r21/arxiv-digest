@@ -1,0 +1,44 @@
+{% extends "_base.html" %}
+{% block title %}Archive — The Daily Abstract{% endblock %}
+{% block folio_label %}Archive{% endblock %}
+{% block description %}Browse the public archive of past editions of The Daily Abstract, organised by arXiv category.{% endblock %}
+{% block og_description %}A public archive of past editions of The Daily Abstract — every daily digest, organised by arXiv category, with permalinks to each paper.{% endblock %}
+{% block content %}
+
+<section class="hero" aria-labelledby="hero-title">
+  <p class="eyebrow">Public archive</p>
+  <h1 id="hero-title" class="hero-title">Every <em>past edition</em>, by category.</h1>
+  <p class="hero-lead">
+    The daily digest, archived. Browse {{ total_categories }} arXiv categories
+    with public editions. Each page lists the new papers from that morning,
+    permanently linkable.
+  </p>
+</section>
+
+{% if total_categories == 0 %}
+<section>
+  <p class="muted">No editions archived yet. The archive populates as the daily digest runs.</p>
+</section>
+{% else %}
+{% for group_name, cats_in_group in grouped_archive.items() %}
+<section aria-labelledby="group-{{ loop.index }}">
+  <div class="section-heading">
+    <h2 id="group-{{ loop.index }}"><span class="sec-num">{{ "%02d"|format(loop.index) }} —</span> <span class="sec-name">{{ group_name }}</span></h2>
+    <span class="section-sub">{{ cats_in_group|length }} categories</span>
+  </div>
+  <ul style="list-style: none; padding: 0; columns: 2; column-gap: var(--space-4);">
+    {% for c in cats_in_group %}
+    <li style="margin-bottom: var(--space-2); break-inside: avoid;">
+      <a href="/archive/{{ c.code }}" style="text-decoration: none; display: flex; gap: 0.6em; align-items: baseline;">
+        <code style="font-family: var(--font-mono); font-size: var(--text-sm); color: var(--accent); min-width: 6em;">{{ c.code }}</code>
+        <span style="color: var(--text); flex: 1;">{{ c.name }}</span>
+        <span class="muted" style="font-size: var(--text-xs); font-family: var(--font-mono);">{{ c.count }} ed.</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% endif %}
+
+{% endblock %}

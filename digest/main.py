@@ -39,7 +39,72 @@ DIGEST_HOUR = os.environ.get("DIGEST_HOUR", "07:00")
 ARXIV_MAX_RESULTS = int(os.environ.get("ARXIV_MAX_RESULTS", "200"))
 ALIVE_FILE = Path("/tmp/alive")
 PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
+ARCHIVE_DIR = Path("/app/data/archive")
 SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
+
+
+def _write_archive(papers: list[dict], issue: int) -> None:
+    """Escribe data/archive/{category}/{YYYY-MM-DD}.json publico para SEO.
+
+    Cada paper se clasifica por su PRIMERA categoria arXiv (evita
+    duplicate-content entre archives). El archive es publico (no contiene
+    info de suscriptores) y alimenta /archive/{cat}/{date} de SEO.
+
+    Cuando el digest se corre varias veces el mismo dia (ej. RUN_NOW + cron),
+    sobreescribe el archive de ese dia. Esperable: cada corrida deduplica
+    via subscriber_seen_papers, asi que los papers serian distintos.
+    """
+    if not papers:
+        return
+    from collections import defaultdict
+    by_cat: dict[str, list[dict]] = defaultdict(list)
+    for p in papers:
+        cats = p.get("categories") or []
+        if not cats:
+            continue
+        primary = cats[0]
+        by_cat[primary].append(p)
+    if not by_cat:
+        return
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    total_written = 0
+    for cat, papers_in_cat in by_cat.items():
+        cat_dir = ARCHIVE_DIR / cat
+        cat_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (cat_dir / f"{date_str}.json").write_text(
+                json.dumps(
+                    {
+                        "category": cat,
+                        "date": date_str,
+                        "issue": issue,
+                        "generated_at": generated_at,
+                        "papers": [
+                            {
+                                "arxiv_id": p.get("arxiv_id", ""),
+                                "title": p.get("title", ""),
+                                "authors": list(p.get("authors") or []),
+                                "abstract": p.get("abstract", ""),
+                                "categories": list(p.get("categories") or []),
+                                "published": p.get("published", ""),
+                                "pdf_url": p.get("pdf_url", ""),
+                            }
+                            for p in papers_in_cat
+                        ],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            total_written += 1
+        except Exception as exc:
+            logger.error("ERROR: archive write %s/%s: %s", cat, date_str, exc)
+    logger.info(
+        "RESULT: archive escrito %d categorias para %s (issue %d)",
+        total_written, date_str, issue,
+    )
 
 
 def _write_public_preview(issue: int, papers: list[dict]) -> None:
@@ -120,6 +185,10 @@ def run_digest() -> None:
         return
 
     issue = next_issue_number()
+
+    # Escribir archive publico para SEO ANTES del loop de suscriptores.
+    # El archive es global (todos los papers del fetch, no filtrados por user).
+    _write_archive(raw, issue)
     translator_url = os.environ.get("TRANSLATOR_URL", "").strip()
     total_sent = 0
     sent_count = 0
