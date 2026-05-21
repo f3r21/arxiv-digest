@@ -1,154 +1,406 @@
 {% extends "_base.html" %}
-
 {% block title %}The Daily Abstract — your morning briefing of new research{% endblock %}
-
 {% block content %}
-
-<section class="hero" aria-labelledby="hero-title">
-  <p class="hero-eyebrow">A daily briefing for researchers</p>
-  <h1 id="hero-title" class="hero-title">New arXiv papers, hand-cut to your interests.</h1>
-  <p class="hero-lead">
-    Pick the arXiv categories you follow. Each morning you get a short edition
-    of new papers that match. Reply to the email with the numbers you want and
-    the PDFs come back as attachments.
-  </p>
-  <div class="btn-row">
-    <a href="#subscribe" class="btn primary">Start subscription →</a>
-    <a href="#how-it-works" class="muted" style="text-decoration: none;">How it works ↓</a>
-  </div>
-</section>
-
-<section aria-labelledby="preview-heading">
-  <div class="section-heading">
-    <h2 id="preview-heading">Today's edition</h2>
-    <span class="section-sub">a sample of what lands in your inbox</span>
-  </div>
-  {% include "_digest_preview.html" %}
-</section>
-
-<section id="subscribe" aria-labelledby="subscribe-heading">
-  <div class="section-heading">
-    <h2 id="subscribe-heading">Subscribe</h2>
-    <span class="section-sub">double opt-in · free · no spam</span>
-  </div>
-
-  <form id="subscribe-form" method="post" action="/subscribe" autocomplete="off">
-
-    <div class="form-row">
-      <label for="email-input">
-        Your email
-        <span class="label-meta">— we'll send a confirmation link</span>
-      </label>
-      <input id="email-input" type="email" name="email" required
-             placeholder="researcher@university.edu" autocomplete="email">
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Open source · MIT</span>
     </div>
 
-    <div class="form-row">
-      <label>
-        Quick presets
-        <span class="label-meta">— click to toggle category bundles</span>
-      </label>
-      <div class="presets" id="presets">
-        {% for p in presets %}
-        <button type="button" class="preset" data-preset-id="{{ p.id }}">
-          {{ p.label }}
-        </button>
-        {% endfor %}
-        <button type="button" class="preset" id="clear-cats">Clear all</button>
+    <!-- ----------- HERO ----------- -->
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">A daily briefing for researchers</p>
+      <p class="hero-kicker">In which the morning's research is cut to size · — · No.&nbsp;<span class="dyn-issue">03</span></p>
+
+      <h1 id="hero-title" class="hero-title">
+        New arXiv papers, <em>hand-cut</em> to your interests.
+      </h1>
+
+      <p class="hero-deck-line">
+        An editorial weekly daily, machine-built and editor-curated by you. Pick your categories; receive a short edition each morning; reply with numbers to get the PDFs.
+      </p>
+
+      <aside class="marginalia">
+        <span class="marg-label">On translation</span>
+        Titles &amp; abstracts run through MyMemory each morning at ~23,400 chars/day — well inside the 50k free tier.
+      </aside>
+
+      <p class="hero-lead">
+        Pick the arXiv categories you follow. Each morning at 7&nbsp;a.m. you get a short edition of new papers that match — <span class="muted-inline">titles and abstracts translated to Spanish, with the originals one link away.</span>
+      </p>
+
+      <div class="reply-demo" aria-hidden="true">
+        <span class="label">Reply with numbers, get PDFs</span>
+        <span><span class="you">you →</span> <strong>1 3 5</strong></span>
+        <span><span class="reply">reply ←</span> <em>three PDFs, attached, ~30 s</em></span>
       </div>
-    </div>
 
-    <div class="form-row">
-      <label for="cat-search">
-        Or browse all arXiv categories
-        <span class="label-meta">— <span id="selected-count">0</span> selected</span>
-      </label>
-      <input id="cat-search" type="search" placeholder="Search: cs.LG, transformer, optimization, biology…">
-      <div id="cat-list" class="cat-list">
-        {% for group, items in grouped_categories.items() %}
-        <details class="cat-group" data-group="{{ group }}"{% if loop.index <= 2 %} open{% endif %}>
-          <summary>{{ group }} <span class="muted">· {{ items|length }}</span></summary>
-          <div class="cat-options">
-            {% for cat in items %}
-            <label class="cat-option" data-search="{{ cat.code|lower }} {{ cat.name|lower }}">
-              <input type="checkbox" name="categories" value="{{ cat.code }}">
-              <span class="code">{{ cat.code }}</span>
-              <span class="name">{{ cat.name }}</span>
-            </label>
+      <div class="btn-row">
+        <a href="#subscribe" class="btn primary">Start subscription →</a>
+        <a href="#today" class="ghost-link">See today's edition ↓</a>
+      </div>
+    </section>
+
+    <!-- ----------- TODAY'S EDITION ----------- -->
+    <section id="today" aria-labelledby="today-heading" data-screen-label="01 Today">
+      <div class="section-heading">
+        <h2 id="today-heading"><span class="sec-num">01 —</span> <span class="sec-name">Today's edition</span></h2>
+        <span class="section-sub">four sample mornings · real arXiv data</span>
+      </div>
+
+      <aside class="marginalia">
+        <span class="marg-label">Editor's note</span>
+        Editions are personalized — each subscriber gets their own. Below: four samples built from popular presets.
+      </aside>
+
+      <div class="editions-switcher" role="tablist" aria-label="Sample editions">
+        <span class="es-label">Browse a sample morning</span>
+        <div class="es-chips">
+          <button type="button" class="es-chip active" role="tab" data-edition="ml">ML</button>
+          <button type="button" class="es-chip" role="tab" data-edition="cv">Vision</button>
+          <button type="button" class="es-chip" role="tab" data-edition="theory">Theory</button>
+          <button type="button" class="es-chip" role="tab" data-edition="distsys">Distsys</button>
+        </div>
+        <span class="es-meta">4 sample mornings · real papers, real dates</span>
+      </div>
+
+      <div class="preview-wrap">
+        <article class="preview-card" aria-label="Email preview">
+
+          <!-- Postmark (tweak: letter card) -->
+          <svg class="pv-postmark" viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#b97f3d" stroke-width="1.5" stroke-dasharray="2 2" opacity="0.75"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#b97f3d" stroke-width="1" opacity="0.55"/>
+            <text x="50" y="36" text-anchor="middle" fill="#b97f3d" font-family="Georgia,serif" font-size="7" font-weight="700" letter-spacing="1.3">THE DAILY</text>
+            <line x1="14" y1="50" x2="86" y2="50" stroke="#b97f3d" stroke-width="0.8" opacity="0.5"/>
+            <text x="50" y="59" text-anchor="middle" fill="#b97f3d" font-family="Georgia,serif" font-size="11" font-weight="700" letter-spacing="0.5" id="pv-postmark-date">18 MAY</text>
+            <text x="50" y="74" text-anchor="middle" fill="#b97f3d" font-family="Georgia,serif" font-size="7" letter-spacing="1.3">· 2026 ·</text>
+          </svg>
+
+          <div class="preview-inner">
+
+            <header class="pv-head">
+              <div class="pv-masthead">The Daily Abstract</div>
+              <h2 class="pv-h1">Hoy en arXiv</h2>
+              <div class="pv-cats" id="pv-cats">cs.LG · cs.AI · stat.ML</div>
+              <div class="pv-issue" id="pv-issue">Muestra<span class="dot">·</span>18 May 2026</div>
+            </header>
+
+            <div class="pv-intro">
+              Hoy <strong><span id="pv-count">4</span> papers nuevos</strong>. Responde con los números para recibir los PDFs adjuntos.
+            </div>
+
+            <div class="pv-pick">
+              <div class="pv-pick-label">Editor's Pick</div>
+              <hr class="pv-pick-rule">
+              <div class="pv-pick-num">01</div>
+              <h3 class="pv-pick-title" id="pv-pick-title">Attention Is All You Need</h3>
+              <div class="pv-authors" id="pv-pick-authors">Vaswani, Shazeer, Parmar, Uszkoreit, Jones, Gomez, Kaiser, Polosukhin</div>
+              <span class="pv-tag" id="pv-pick-tag">cs.LG · keyword match: transformer</span>
+              <p class="pv-abstract" id="pv-pick-abstract">
+                The Transformer architecture relies entirely on attention mechanisms, dispensing with recurrence and convolutions. We show superior quality on machine translation while being more parallelizable and requiring significantly less time to train than recurrent or convolutional baselines.
+              </p>
+              <div class="pv-link-row">
+                <a href="#">arxiv.org/abs/<span id="pv-pick-arxiv">1706.03762</span></a>
+                <span class="sep">·</span>
+                <em>responde con <strong>1</strong> para el PDF</em>
+              </div>
+            </div>
+
+            <div class="pv-also-head">
+              <div class="pv-pick-label">También hoy</div>
+              <hr>
+            </div>
+
+            <div id="pv-papers">
+              <div class="pv-paper">
+                <div class="pv-paper-num">02</div>
+                <h3>Sparse-Reward RL Without Manual Shaping</h3>
+                <div class="pv-authors">Wu, Chen <span class="pv-mini-tag">cs.LG · cs.AI</span></div>
+                <p>We propose an intrinsic motivation signal that allows agents to learn from sparse rewards without engineered reward shaping, matching or surpassing state-of-the-art on a 26-game Atari benchmark suite.</p>
+                <div class="pv-link-row">
+                  <a href="#">arxiv.org/abs/2403.21712</a><span class="sep">·</span><em>responde con <strong>2</strong></em>
+                </div>
+              </div>
+              <div class="pv-paper">
+                <div class="pv-paper-num">03</div>
+                <h3>Retrieval-Augmented Decoders Forget Less Than You Think</h3>
+                <div class="pv-authors">Ortega, Lin, Suzuki <span class="pv-mini-tag">cs.CL</span></div>
+                <p>Long-context retrieval-augmented decoders preserve more fine-grained factual content than equivalently-sized parametric models, even when the retrieved passage is paraphrased rather than verbatim.</p>
+                <div class="pv-link-row">
+                  <a href="#">arxiv.org/abs/2405.04219</a><span class="sep">·</span><em>responde con <strong>3</strong></em>
+                </div>
+              </div>
+              <div class="pv-paper">
+                <div class="pv-paper-num">04</div>
+                <h3>Compositional Sample Efficiency in MoE Language Models</h3>
+                <div class="pv-authors">Watanabe, Hassan <span class="pv-mini-tag">cs.LG</span></div>
+                <p>Mixture-of-experts language models trained on a carefully balanced curriculum acquire compositional skills with up to 4.3× fewer tokens than a dense parameter-matched baseline.</p>
+                <div class="pv-link-row">
+                  <a href="#">arxiv.org/abs/2405.11423</a><span class="sep">·</span><em>responde con <strong>4</strong></em>
+                </div>
+              </div>
+            </div>
+
+            <div class="pv-omitted" id="pv-omitted">+ 11 papers omitted past your daily cap of 4.</div>
+
+            <footer class="pv-foot">
+              <div class="brand">The Daily Abstract</div>
+              <div>Responde a este correo con los números de los papers que quieres leer.</div>
+              <div>El listener te enviará los PDFs adjuntos en ~30 segundos.</div>
+              <div class="meta">
+                Suscrito como <strong style="color:#888;">you@university.edu</strong>.
+                <a href="#">Manage subscription</a>
+                <span class="sep" style="color:#ccc;">·</span>
+                <a href="#">Unsubscribe</a>
+              </div>
+            </footer>
+
+          </div>
+        </article>
+
+        <div class="preview-caption">
+          <span>Each subscriber's edition is filtered to their own categories</span>
+          <span>— these four are popular presets</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ----------- REPLY FLOW SECTION (tweak: replyDemo=section/both) ----------- -->
+    <section id="reply-section" aria-labelledby="reply-heading" data-screen-label="01.5 Reply flow">
+      <div class="section-heading">
+        <h2 id="reply-heading"><span class="sec-num">01½ —</span> <span class="sec-name">Reply with numbers, get PDFs</span></h2>
+        <span class="section-sub">our one trick · no competitor has it</span>
+      </div>
+
+      <p style="font-family: var(--font-serif); font-size: var(--text-lg); color: var(--text-muted); max-width: 56ch; margin: 0 0 var(--space-3); line-height: 1.55;">
+        Every digest carries a <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">Reply-To</code> address. Type the integers you want, hit send, and the PDFs come back as attachments — usually inside thirty seconds.
+      </p>
+
+      <div class="reply-flow" aria-hidden="true">
+        <div class="reply-cell">
+          <div>
+            <div class="step-label">① You read</div>
+            <div class="step-body">The morning's edition, four papers, two minutes.</div>
+          </div>
+          <div class="step-foot">subject: hoy en arxiv · no. <span class="dyn-issue">03</span></div>
+        </div>
+
+        <div class="reply-arrow">→</div>
+
+        <div class="reply-cell">
+          <div>
+            <div class="step-label">② You reply</div>
+            <div class="step-body">Numbers, natural language, either language.</div>
+            <div class="typed">quiero el <strong>1</strong> y el <strong>3</strong></div>
+          </div>
+          <div class="step-foot">to: digest@…<br>~30 s later</div>
+        </div>
+
+        <div class="reply-arrow">→</div>
+
+        <div class="reply-cell">
+          <div>
+            <div class="step-label">③ PDFs arrive</div>
+            <div class="step-body">Re: hoy en arxiv · no. <span class="dyn-issue">03</span> — fetched from arXiv, attached, done.</div>
+            <div class="pdfs">
+              <span class="pdf">1706.03762.pdf</span>
+              <span class="pdf">2403.21712.pdf</span>
+            </div>
+          </div>
+          <div class="step-foot">from: digest@…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ----------- SUBSCRIBE ----------- -->
+    <section id="subscribe" aria-labelledby="subscribe-heading" data-screen-label="02 Subscribe">
+      <div class="section-heading">
+        <h2 id="subscribe-heading"><span class="sec-num">02 —</span> <span class="sec-name">Subscribe</span></h2>
+        <span class="section-sub">double opt-in · free · no tracking</span>
+      </div>
+
+      <aside class="marginalia">
+        <span class="marg-label">On unsubscribing</span>
+        One click in any digest footer, or reply with <em>STOP</em>. No retention emails, no win-back campaigns. We don't even know who you are unless you tell us.
+      </aside>
+
+      <form id="subscribe-form" method="post" action="/subscribe" autocomplete="off" novalidate>
+
+        <div class="form-row">
+          <label class="form-label" for="email-input">
+            Your email
+            <span class="label-meta">— we'll send a confirmation link, valid 48 h</span>
+          </label>
+          <input id="email-input" type="email" name="email" required
+                 placeholder="researcher@university.edu" autocomplete="email">
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">
+            Quick presets
+            <span class="label-meta">— click to toggle bundles; combine freely</span>
+          </label>
+          <div class="presets" id="presets">
+            <button type="button" class="preset" data-preset-id="ml">Machine Learning</button>
+            <button type="button" class="preset" data-preset-id="distsys">Distributed Systems</button>
+            <button type="button" class="preset" data-preset-id="theory">Theory</button>
+            <button type="button" class="preset" data-preset-id="nlp">NLP</button>
+            <button type="button" class="preset" data-preset-id="cv">Computer Vision</button>
+            <button type="button" class="preset" data-preset-id="sec">Security</button>
+            <button type="button" class="preset" data-preset-id="robotics">Robotics</button>
+            <button type="button" class="preset clear" id="clear-cats">Clear all</button>
+          </div>
+        </div>
+
+        <!-- Selected chips strip (tweak) -->
+        <div class="selected-chips" id="selected-chips" aria-live="polite">
+          <p class="meta-line"><span>Your edition</span><span class="vol" id="chip-vol">— pick at least one category</span></p>
+          <span class="placeholder">No categories selected yet. Try a preset above.</span>
+        </div>
+
+        <!-- Cap inline (tweak) -->
+        <div class="cap-inline" id="cap-inline-row">
+          <label for="cap-inline-input">Daily cap</label>
+          <input id="cap-inline-input" type="number" min="1" max="30" value="4">
+          <span class="papers">papers per day · the editor's cut</span>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label" for="cat-search">
+            Or browse all arXiv categories
+            <span class="label-meta">— <span id="selected-count">0</span> selected of 155<span class="volume-hint"> · ≈&nbsp;<span id="volume-estimate">0</span>&nbsp;papers/day</span></span>
+          </label>
+          <input id="cat-search" type="search" placeholder="Search: cs.LG, transformer, optimization, biology…">
+          <div id="cat-list" class="cat-list">
+            {% for group, items in grouped_categories.items() %}
+            <details class="cat-group" data-group="{{ group }}"{% if loop.index <= 2 or items|selectattr('code', 'in', selected_codes)|list %} open{% endif %}>
+              <summary>{{ group }} <span class="count">· {{ items|length }}</span></summary>
+              <div class="cat-options">
+                {% for cat in items %}
+                <label class="cat-option" data-search="{{ cat.code|lower }} {{ cat.name|lower }}">
+                  <input type="checkbox" name="categories" value="{{ cat.code }}"{% if cat.code in selected_codes %} checked{% endif %}>
+                  <span class="code">{{ cat.code }}</span>
+                  <span class="name">{{ cat.name }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </details>
             {% endfor %}
           </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced — keyword filter, daily cap</summary>
+          <div class="advanced-body">
+            <div class="form-row">
+              <label class="form-label" for="keywords">
+                Keywords filter
+                <span class="label-meta">— only include papers whose title or abstract mentions one of these</span>
+              </label>
+              <textarea id="keywords" name="keywords" rows="2" placeholder="transformer, kubernetes, optimization"></textarea>
+              <p class="hint">Comma-separated. Leave empty to include all papers in your categories.</p>
+            </div>
+            <div class="form-row cap-advanced">
+              <label class="form-label" for="max_papers">
+                Max papers per day
+                <span class="label-meta">— editor's cut</span>
+              </label>
+              <input id="max_papers" type="number" name="max_papers" value="4" min="1" max="30">
+            </div>
+          </div>
         </details>
-        {% endfor %}
+
+        <div class="btn-row">
+          <button type="submit" class="btn primary" id="submit-btn">Confirm by email →</button>
+        </div>
+        <p id="form-status" class="status" hidden></p>
+
+        <p class="form-trust">
+          No password<span class="sep">·</span>One-click unsubscribe in every email<span class="sep">·</span>Source on GitHub
+        </p>
+      </form>
+    </section>
+
+    <!-- ----------- HOW IT WORKS ----------- -->
+    <section id="how" aria-labelledby="how-heading" data-screen-label="03 How it works">
+      <div class="section-heading">
+        <h2 id="how-heading"><span class="sec-num">03 —</span> <span class="sec-name">How it works</span></h2>
+        <span class="section-sub">four steps · zero passwords</span>
       </div>
+
+      <aside class="marginalia">
+        <span class="marg-label">Footprint</span>
+        Six Docker containers in ~165 MB idle on an Oracle Cloud always-free 1 GB shared-CPU VM. We have headroom.
+      </aside>
+
+      <ol class="steps">
+        <li><div>
+          <h3>You subscribe.</h3>
+          <p>Pick categories — by preset or à la carte from the 155 official arXiv codes. Optionally narrow by keyword. We send a confirmation email; one click activates.</p>
+        </div></li>
+        <li><div>
+          <h3>We ship at 7 a.m.</h3>
+          <p>One nightly fetch to the arXiv API for the union of every subscriber's filter, then per-subscriber slicing. Titles and abstracts translated to Spanish via MyMemory; originals one link away.</p>
+        </div></li>
+        <li><div>
+          <h3>You reply with numbers.</h3>
+          <p>Type <code>1 3 5</code>, or <em>"quiero el 2 y el 7"</em>, or <em>"the second one"</em>. The listener parses the integers, fetches those PDFs from arXiv, and replies with them attached — usually within thirty seconds.</p>
+        </div></li>
+        <li><div>
+          <h3>Manage anytime.</h3>
+          <p>Every digest carries a signed link to edit categories, change the daily cap, or unsubscribe. No login, no password. The link is yours alone.</p>
+        </div></li>
+      </ol>
+    </section>
+
+    <!-- ----------- FAQ ----------- -->
+    <section id="faq" aria-labelledby="faq-heading" data-screen-label="04 FAQ">
+      <div class="section-heading">
+        <h2 id="faq-heading"><span class="sec-num">04 —</span> <span class="sec-name">Frequently asked</span></h2>
+        <span class="section-sub">four questions, four answers</span>
+      </div>
+      <dl class="faq">
+        <dt>What does it cost?</dt>
+        <dd>Nothing. The whole stack runs on Oracle Cloud's always-free tier (one shared CPU, 1 GB RAM, six Docker containers in ~165 MB idle), plus free quotas of Brevo for outbound mail and Mailsac for reply parsing. If it ever gets popular enough to outgrow that envelope we'll add a Pro tier for power features — but the basic digest stays free, forever.</dd>
+
+        <dt>The reply-to-PDF thing — how does that actually work?</dt>
+        <dd>Every digest is sent with <code>Reply-To</code> pointing at a Mailsac inbox we poll every 10 minutes. When a reply arrives, we identify you by your <code>From</code> address, pull up your snapshot of that morning's edition, extract integers from the body (any natural-language wrapper is fine), download those PDFs from arXiv, and reply with them attached. Senders we don't recognise are silently dropped.</dd>
+
+        <dt>Who's behind this?</dt>
+        <dd>An indie open-source project. <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">Source on GitHub</a>, MIT licensed, self-hostable end-to-end. Originally built as a university Cloud Computing project; now run as a public service. No company, no investors, no ads, no data resold.</dd>
+
+        <dt>How do I cancel?</dt>
+        <dd>Every email has a one-click unsubscribe link in the footer, plus a <code>List-Unsubscribe</code> header so Gmail's native button works too. You can also reply with <em>STOP</em>, or write to the address shown in the colophon.</dd>
+      </dl>
+    </section>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
     </div>
 
-    <details class="form-row">
-      <summary style="cursor: pointer; color: var(--text-muted); font-size: var(--text-sm);">
-        Advanced — keywords filter, daily cap
-      </summary>
-      <div style="padding-top: var(--space-3);">
-        <div class="form-row">
-          <label for="keywords">
-            Keywords filter
-            <span class="label-meta">— only include papers whose title or abstract mentions one of these</span>
-          </label>
-          <textarea id="keywords" name="keywords" rows="2"
-                    placeholder="transformer, kubernetes, optimization"></textarea>
-          <p class="hint">Comma-separated. Leave empty to include all papers in your categories.</p>
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
         </div>
-        <div class="form-row">
-          <label for="max_papers">
-            Max papers per day
-            <span class="label-meta">— editor's cut</span>
-          </label>
-          <input id="max_papers" type="number" name="max_papers" value="15" min="1" max="30">
-        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/#subscribe">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
       </div>
-    </details>
-
-    <div class="btn-row">
-      <button type="submit" class="btn primary" id="submit-btn">Confirm by email →</button>
-    </div>
-    <p id="form-status" class="status" hidden></p>
-  </form>
-</section>
-
-<section id="how-it-works" aria-labelledby="how-heading">
-  <div class="section-heading">
-    <h2 id="how-heading">How it works</h2>
-  </div>
-  <ol style="padding-left: 1.4em; line-height: 1.8; max-width: 60ch;">
-    <li><strong>You subscribe.</strong> Pick categories and (optionally) keywords. We send a confirmation email — single click to activate.</li>
-    <li><strong>Each morning we ship.</strong> One fetch to arXiv, filtered for your set, translated to Spanish, emailed at 7am.</li>
-    <li><strong>You reply with numbers.</strong> "1, 3, 5" — and the PDFs of those papers come back attached to the reply.</li>
-    <li><strong>Manage anytime.</strong> Every digest has a link to change your categories or unsubscribe.</li>
-  </ol>
-</section>
-
-<section id="faq" aria-labelledby="faq-heading">
-  <div class="section-heading">
-    <h2 id="faq-heading">FAQ</h2>
-  </div>
-  <dl class="faq">
-    <dt>What does it cost?</dt>
-    <dd>Nothing. The whole stack runs on Oracle Cloud's always-free tier and we use free quotas of Brevo for outbound email and Mailsac for reply parsing. If it gets popular we may add a Pro tier for power features, but the basic digest stays free.</dd>
-
-    <dt>Who's behind this?</dt>
-    <dd>An indie, open-source project. Source on <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a>. No company. No ads. No data resold.</dd>
-
-    <dt>How do I get the PDFs?</dt>
-    <dd>Reply to the digest email with the numbers of the papers you want — "1 3 5", "the second one", or "quiero el 2 y 7". The listener parses the numbers, downloads from arXiv, and replies with the PDFs attached. Usually within 30 seconds.</dd>
-
-    <dt>How do I cancel?</dt>
-    <dd>Every email has a one-click unsubscribe link in the footer. You can also reply with "STOP" or write to the address shown there.</dd>
-  </dl>
-</section>
-
-{% endblock %}
-
-{% block scripts %}
-<script>
-window.__PRESETS__ = {{ presets_json|safe }};
-</script>
-<script src="/static/app.js"></script>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

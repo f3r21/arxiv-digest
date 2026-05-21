@@ -1,31 +1,66 @@
 {% extends "_base.html" %}
-
-{% block title %}Welcome to The Daily Abstract{% endblock %}
-
-{% set narrow = true %}
-
+{% block title %}You are in — The Daily Abstract{% endblock %}
 {% block content %}
-<section class="hero" aria-labelledby="ok-title">
-  <p class="hero-eyebrow">You're in</p>
-  <h1 id="ok-title" class="hero-title">Welcome to The Daily Abstract.</h1>
-  <p class="hero-lead">
-    Confirmed <strong>{{ email }}</strong>. The next edition lands in your
-    inbox at 7am with new papers in:
-  </p>
-</section>
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Subscription confirmed</span>
+    </div>
 
-<section>
-  <div class="cat-selected-summary">
-    {% for c in categories %}<span class="pill">{{ c }}</span>{% endfor %}
-  </div>
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Confirmed · welcome</p>
+      <h1 id="hero-title" class="hero-title">You're <em>in</em>.</h1>
+      <p class="hero-lead">
+        Tomorrow at 7&nbsp;a.m. (your local time) the first edition lands in your inbox. <span class="muted-inline">Reply with the numbers of the papers you want and the PDFs come back as attachments — usually within thirty seconds.</span>
+      </p>
 
-  <p class="muted">
-    Want to fine-tune? Every digest has a "Manage subscription" link in the
-    footer. {% if manage_url %}You can also <a href="{{ manage_url }}">manage now →</a>.{% endif %}
-  </p>
+      <div class="status success" style="margin-top: var(--space-5); padding: var(--space-4);">
+        <div style="font-family: var(--font-serif); font-size: var(--text-lg); color: var(--text); margin-bottom: var(--space-3);">What you signed up for</div>
+        <div style="display: flex; gap: 0.4em; flex-wrap: wrap; margin-bottom: var(--space-3);">
+          {% for code in categories %}<span class="pill" style="background: var(--accent-soft); color: var(--accent); border-color: var(--accent);">{{ code }}</span>{% endfor %}
+        </div>
+        <div style="font-size: var(--text-sm); color: var(--text-muted); line-height: 1.7;">
+          Daily cap: <strong style="color: var(--text);">{{ subscriber.max_papers if subscriber else 15 }} papers</strong> &nbsp;·&nbsp; Keyword filter: <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">{% if subscriber and subscriber.keywords %}{{ subscriber.keywords|join(", ") }}{% else %}none — all papers in your categories{% endif %}</code><br>
+          Spanish translation: <strong style="color: var(--text);">on</strong> &nbsp;·&nbsp; Reply-to-PDF: <strong style="color: var(--text);">on</strong>
+        </div>
+      </div>
 
-  <div class="btn-row">
-    <a href="/" class="btn ghost">Back to home</a>
-  </div>
-</section>
+      <div class="btn-row" style="margin-top: var(--space-5);">
+        <a href="/#today" class="btn primary">See a sample edition →</a>
+        <a href="{{ manage_url }}" class="ghost-link">Edit preferences</a>
+      </div>
+
+      <p class="form-trust" style="margin-top: var(--space-5);">
+        First edition arrives <strong style="color: var(--text); font-weight: 600;">tomorrow at 7&nbsp;a.m.</strong><span class="sep">·</span>Manage link valid for 30 days
+      </p>
+    </section>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
+    </div>
+
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="{{ manage_url }}">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

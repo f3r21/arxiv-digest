@@ -1,99 +1,149 @@
 {% extends "_base.html" %}
-
-{% block title %}Manage your Daily Abstract{% endblock %}
-
+{% block title %}Manage your subscription — The Daily Abstract{% endblock %}
 {% block content %}
-
-<section class="hero" aria-labelledby="manage-title">
-  <p class="hero-eyebrow">Your subscription</p>
-  <h1 id="manage-title" class="hero-title">Manage your Daily Abstract</h1>
-  <p class="hero-lead">
-    Subscriber: <strong>{{ subscriber.email }}</strong>. Adjust categories,
-    keywords or daily cap. Changes take effect at the next edition.
-  </p>
-</section>
-
-{% if saved %}
-<p class="status success">✓ Changes saved.</p>
-{% endif %}
-
-<section aria-labelledby="manage-form-heading">
-  <div class="section-heading">
-    <h2 id="manage-form-heading">Edit subscription</h2>
-  </div>
-
-  <form id="manage-form" method="post" action="/manage?token={{ token }}" autocomplete="off">
-
-    <div class="form-row">
-      <label>
-        Quick presets
-        <span class="label-meta">— click to toggle category bundles</span>
-      </label>
-      <div class="presets" id="presets">
-        {% for p in presets %}
-        <button type="button" class="preset" data-preset-id="{{ p.id }}">
-          {{ p.label }}
-        </button>
-        {% endfor %}
-        <button type="button" class="preset" id="clear-cats">Clear all</button>
-      </div>
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Manage subscription</span>
     </div>
 
-    <div class="form-row">
-      <label for="cat-search">
-        Categories
-        <span class="label-meta">— <span id="selected-count">0</span> selected</span>
-      </label>
-      <input id="cat-search" type="search" placeholder="Search: cs.LG, transformer, optimization…">
-      <div id="cat-list" class="cat-list">
-        {% for group, items in grouped_categories.items() %}
-        <details class="cat-group" data-group="{{ group }}"
-                 {% if loop.index <= 2 or items|selectattr('code', 'in', selected_codes)|list %} open{% endif %}>
-          <summary>{{ group }} <span class="muted">· {{ items|length }}</span></summary>
-          <div class="cat-options">
-            {% for cat in items %}
-            <label class="cat-option" data-search="{{ cat.code|lower }} {{ cat.name|lower }}">
-              <input type="checkbox" name="categories" value="{{ cat.code }}"
-                     {% if cat.code in selected_codes %}checked{% endif %}>
-              <span class="code">{{ cat.code }}</span>
-              <span class="name">{{ cat.name }}</span>
-            </label>
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Manage subscription</p>
+      <h1 id="hero-title" class="hero-title">Edit your <em>standing order</em>.</h1>
+      <p class="hero-lead">
+        Adjust your categories, keywords, or daily cap. Changes take effect with tomorrow's edition. <span class="muted-inline">Your management link is yours alone — no password, no login.</span>
+      </p>
+    </section>
+
+    <section id="subscribe" aria-labelledby="subscribe-heading">
+      <div class="section-heading">
+        <h2 id="subscribe-heading"><span class="sec-num">—</span> <span class="sec-name">Your subscription</span></h2>
+        <span class="section-sub">subscribed {{ subscriber.confirmed_at[:10] if subscriber.confirmed_at else "—" }} · {{ subscriber.categories|length }} categories</span>
+      </div>
+
+      <form id="subscribe-form" method="post" action="/manage?token={{ token }}" autocomplete="off" novalidate>
+
+        <div class="form-row">
+          <label class="form-label" for="email-input">
+            Email address
+            <span class="label-meta">— to change this, unsubscribe and resubscribe</span>
+          </label>
+          <input id="email-input" type="email" name="email" value="{{ subscriber.email }}" readonly style="opacity: 0.6; cursor: not-allowed;">
+        </div>
+
+        <div class="form-row">
+          <label class="form-label">
+            Quick presets
+            <span class="label-meta">— click to toggle bundles; combine freely</span>
+          </label>
+          <div class="presets" id="presets">
+            <button type="button" class="preset" data-preset-id="ml">Machine Learning</button>
+            <button type="button" class="preset" data-preset-id="distsys">Distributed Systems</button>
+            <button type="button" class="preset" data-preset-id="theory">Theory</button>
+            <button type="button" class="preset" data-preset-id="nlp">NLP</button>
+            <button type="button" class="preset" data-preset-id="cv">Computer Vision</button>
+            <button type="button" class="preset" data-preset-id="sec">Security</button>
+            <button type="button" class="preset" data-preset-id="robotics">Robotics</button>
+            <button type="button" class="preset clear" id="clear-cats">Clear all</button>
+          </div>
+        </div>
+
+        <!-- Selected chips strip (tweak) -->
+        <div class="selected-chips" id="selected-chips" aria-live="polite">
+          <p class="meta-line"><span>Your edition</span><span class="vol" id="chip-vol">— pick at least one category</span></p>
+          <span class="placeholder">No categories selected yet. Try a preset above.</span>
+        </div>
+
+        <!-- Cap inline (tweak) -->
+        <div class="cap-inline" id="cap-inline-row">
+          <label for="cap-inline-input">Daily cap</label>
+          <input id="cap-inline-input" type="number" min="1" max="30" value="{{ subscriber.max_papers }}">
+          <span class="papers">papers per day · the editor's cut</span>
+        </div>
+
+        <div class="form-row">
+          <label class="form-label" for="cat-search">
+            Or browse all arXiv categories
+            <span class="label-meta">— <span id="selected-count">0</span> selected of 155<span class="volume-hint"> · ≈&nbsp;<span id="volume-estimate">0</span>&nbsp;papers/day</span></span>
+          </label>
+          <input id="cat-search" type="search" placeholder="Search: cs.LG, transformer, optimization, biology…">
+          <div id="cat-list" class="cat-list">
+            {% for group, items in grouped_categories.items() %}
+            <details class="cat-group" data-group="{{ group }}"{% if loop.index <= 2 or items|selectattr('code', 'in', selected_codes)|list %} open{% endif %}>
+              <summary>{{ group }} <span class="count">· {{ items|length }}</span></summary>
+              <div class="cat-options">
+                {% for cat in items %}
+                <label class="cat-option" data-search="{{ cat.code|lower }} {{ cat.name|lower }}">
+                  <input type="checkbox" name="categories" value="{{ cat.code }}"{% if cat.code in selected_codes %} checked{% endif %}>
+                  <span class="code">{{ cat.code }}</span>
+                  <span class="name">{{ cat.name }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </details>
             {% endfor %}
           </div>
+        </div>
+
+        <details class="advanced">
+          <summary>Advanced — keyword filter, daily cap</summary>
+          <div class="advanced-body">
+            <div class="form-row">
+              <label class="form-label" for="keywords">
+                Keywords filter
+                <span class="label-meta">— only include papers whose title or abstract mentions one of these</span>
+              </label>
+              <textarea id="keywords" name="keywords" rows="2" placeholder="transformer, kubernetes, optimization">{{ keywords_str }}</textarea>
+              <p class="hint">Comma-separated. Leave empty to include all papers in your categories.</p>
+            </div>
+            <div class="form-row cap-advanced">
+              <label class="form-label" for="max_papers">
+                Max papers per day
+                <span class="label-meta">— editor's cut</span>
+              </label>
+              <input id="max_papers" type="number" name="max_papers" value="{{ subscriber.max_papers }}" min="1" max="30">
+            </div>
+          </div>
         </details>
-        {% endfor %}
+
+        <div class="btn-row">
+          <button type="submit" class="btn primary" id="submit-btn">Save changes →</button>
+          <a href="{{ unsubscribe_url }}" class="ghost-link" style="color: var(--danger); border-bottom-color: var(--border-strong); margin-left: 0.5rem;">or unsubscribe instead →</a>
+        </div>
+        <p id="form-status" class="status" hidden></p>
+
+        <p class="form-trust">
+          Token-based access · No password · Changes apply tomorrow morning
+        </p>
+      </form>
+    </section>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
+    </div>
+
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="#">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
       </div>
-    </div>
-
-    <div class="form-row">
-      <label for="keywords">
-        Keywords filter
-        <span class="label-meta">— only include papers whose title or abstract mentions one of these</span>
-      </label>
-      <textarea id="keywords" name="keywords" rows="2"
-                placeholder="transformer, kubernetes, optimization">{{ keywords_str }}</textarea>
-      <p class="hint">Comma-separated. Empty = include all papers in your categories.</p>
-    </div>
-
-    <div class="form-row">
-      <label for="max_papers">Max papers per day</label>
-      <input id="max_papers" type="number" name="max_papers" value="{{ subscriber.max_papers }}" min="1" max="30">
-    </div>
-
-    <div class="btn-row">
-      <button type="submit" class="btn primary" id="submit-btn">Save changes</button>
-      <a href="{{ unsubscribe_url }}" class="muted" style="font-size: var(--text-sm);">
-        Or unsubscribe completely →
-      </a>
-    </div>
-  </form>
-</section>
-
-{% endblock %}
-
-{% block scripts %}
-<script>
-window.__PRESETS__ = {{ presets_json|safe }};
-</script>
-<script src="/static/app.js"></script>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

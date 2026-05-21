@@ -1,74 +1,89 @@
 {% extends "_base.html" %}
-
 {% block title %}Privacy — The Daily Abstract{% endblock %}
-
 {% block content %}
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Privacy policy</span>
+    </div>
 
-<section class="hero" aria-labelledby="priv-title">
-  <p class="hero-eyebrow">Last updated · {{ today_label }}</p>
-  <h1 id="priv-title" class="hero-title">Privacy</h1>
-</section>
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Privacy policy</p>
+      <h1 id="hero-title" class="hero-title">What we know about <em>you</em>.</h1>
+      <p class="hero-lead">
+        Short version: your email address, your category list, and nothing else. No trackers, no analytics, no cookies.
+      </p>
+    </section>
 
-<article class="prose">
-  <p>
-    The Daily Abstract is an indie project run by one person. We respect
-    your inbox and your privacy. Here's exactly what we collect, why, and how
-    you control it.
-  </p>
+    <article class="prose" style="margin-top: var(--space-section);">
 
-  <h2>What we store</h2>
-  <ul>
-    <li><strong>Your email address.</strong> So we know where to send the
-      digest. Stored encrypted at rest in a SQLite database on our server.</li>
-    <li><strong>The categories and keywords you picked.</strong> So we can
-      build your personalized digest.</li>
-    <li><strong>Your IP address.</strong> Logged on subscription requests
-      for anti-abuse only (rate limit + audit log). Not linked to your
-      identity beyond that.</li>
-    <li><strong>What papers we sent you.</strong> So we don't send the same
-      paper twice.</li>
-  </ul>
+      <h2>What we store</h2>
+      <p>When you subscribe, we record exactly these fields in our SQLite database:</p>
+      <ul>
+        <li>Your <strong>email address</strong> — to deliver the daily edition.</li>
+        <li>Your <strong>arXiv category list</strong> — to filter what lands in your edition.</li>
+        <li>Your <strong>keyword filter</strong>, if you provided one — for finer filtering within those categories.</li>
+        <li>Your <strong>daily cap</strong> (default 4) — to size each edition.</li>
+        <li>A <strong>signed token</strong> tied to your address — so management links in emails resolve to your account without a password.</li>
+      </ul>
 
-  <h2>What we don't do</h2>
-  <ul>
-    <li>We don't sell, rent, or share your email with anyone.</li>
-    <li>We don't track you on third-party sites.</li>
-    <li>We don't use analytics (no Google Analytics, no Plausible, nothing).</li>
-    <li>We don't profile you for ads. There are no ads.</li>
-  </ul>
+      <h2>What we don't store</h2>
+      <ul>
+        <li>Your name, location, IP address, browser fingerprint, or any analytics.</li>
+        <li>The papers you opened, replied with, or didn't read.</li>
+        <li>Any tracking pixels in emails — the digest ships as plain HTML with no remote images and no read receipts.</li>
+        <li>Cookies. The site sets none. Your subscription state lives in your email inbox, not your browser.</li>
+      </ul>
 
-  <h2>Third parties we rely on</h2>
-  <ul>
-    <li><strong>Brevo</strong> — sends the actual emails. They see your
-      email address but only act as the delivery transport.</li>
-    <li><strong>Mailsac</strong> — receives the inbox where your replies
-      arrive. So we can map "reply with 1 3 5" to PDFs.</li>
-    <li><strong>Let's Encrypt</strong> — issues our HTTPS certificate.</li>
-  </ul>
-  <p>
-    All three are industry-standard providers with their own privacy
-    policies. We don't share data with them beyond what's strictly
-    necessary for delivery.
-  </p>
+      <h2>Third parties</h2>
+      <p>We use three free-tier services to operate. Each receives the minimum data needed:</p>
+      <ul>
+        <li><strong>MyMemory</strong> — receives paper titles and abstracts to translate to Spanish. Does not receive your email or any identifying information.</li>
+        <li><strong>Brevo</strong> (SMTP relay) — receives the outbound email body and your address to deliver it. Does not see your category list.</li>
+        <li><strong>Mailsac</strong> (reply inbox) — receives inbound replies containing your address and the paper numbers you sent. Polled every 10&nbsp;minutes.</li>
+      </ul>
 
-  <h2>How to delete your data</h2>
-  <p>
-    Click the unsubscribe link in any digest. Your subscription is marked as
-    cancelled immediately. To request full deletion of all records (including
-    audit logs), email the address in the footer.
-  </p>
+      <h2>Your rights</h2>
+      <p>You can:</p>
+      <ul>
+        <li><strong>Edit</strong> your categories, keywords, or cap at any time via the manage link in any email.</li>
+        <li><strong>Unsubscribe</strong> with one click in any email, or reply <em>STOP</em>.</li>
+        <li><strong>Delete</strong> your record completely by replying <em>DELETE</em> — your row is purged within 24&nbsp;hours.</li>
+        <li><strong>Audit</strong> what we run — the entire codebase is on <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a>, MIT-licensed.</li>
+      </ul>
 
-  <h2>Changes to this policy</h2>
-  <p>
-    If we ever change how we handle data we'll update this page and notify
-    active subscribers by email at least 30 days before any change takes
-    effect.
-  </p>
+      <h2>Contact</h2>
+      <p>This is a hobby project, not a company. Issues and questions go in the <a href="https://github.com/f3r21/arxiv-digest/issues" target="_blank" rel="noopener">repo issue tracker</a>. The maintainer is reachable through that channel.</p>
 
-  <h2>Contact</h2>
-  <p>
-    For privacy questions or data requests, write to the contact in the
-    footer or open an issue at our <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub repo</a>.
-  </p>
-</article>
+      <p style="font-style: italic; font-size: var(--text-sm); color: var(--text-faint); margin-top: var(--space-4);">Last updated: {{ today_label }}.</p>
+    </article>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
+    </div>
+
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="#">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/#subscribe">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

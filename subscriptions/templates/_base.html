@@ -3,41 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{% block title %}The Daily Abstract{% endblock %}</title>
-  <meta name="description" content="{% block description %}Your morning briefing of new research. Pick your arXiv categories, get a curated digest, reply with numbers to receive the PDFs.{% endblock %}">
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22 font-family=%22Georgia%22 fill=%22%23d99c5e%22>A</text></svg>">
-</head>
-<body>
-  <header class="masthead">
-    <div class="masthead-inner">
-      <p class="masthead-title"><a href="/">The Daily Abstract</a></p>
-      <p class="masthead-meta">{% block masthead_meta %}Daily edition · {{ today_label or '' }}{% endblock %}</p>
-    </div>
-  </header>
+  <title>{% block title %}The Daily Abstract — your morning briefing of new research{% endblock %}</title>
+  <meta name="description" content="{% block description %}New arXiv papers, hand-cut to your interests. A daily edition in your inbox by 7am. Reply with the numbers to receive the PDFs.{% endblock %}">
 
-  {% block main %}
-  <main class="container{% if narrow %} narrow{% endif %}">
+  <!-- Social sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="The Daily Abstract">
+  <meta property="og:title" content="{% block og_title %}The Daily Abstract — your morning briefing of new research{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Pick the arXiv categories you follow. Each morning at 7 a.m. you get a short edition of new papers that match. Reply with the numbers to receive the PDFs.{% endblock %}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{% block twitter_title %}The Daily Abstract{% endblock %}">
+  <meta name="twitter:description" content="{% block twitter_description %}A daily edition of new arXiv research, hand-cut to your interests.{% endblock %}">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22 font-family=%22Georgia%22 fill=%22%23d99c5e%22>A</text></svg>">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="letter-card-on folio-on hero-deck-on section-ornament-on chips-on cap-inline-on full-footer-on" data-reply-demo="off" data-drop-cap="none">
+
+<div class="shell">
+
+  <!-- ================================ SIDEBAR ================================ -->
+  <aside class="sidebar" aria-label="Site">
+
+    <div class="masthead">
+      <p class="masthead-title"><a href="/">The Daily<br>Abstract</a></p>
+      <p class="masthead-tagline">A daily edition of new arXiv research, hand-cut to your categories.</p>
+      <p class="masthead-edition" id="masthead-edition">Vol.&nbsp;I<span class="me-issue-wrap" style="display:none"> · <span class="me-issue"></span></span> · {{ today_label }}</p>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Sections">
+      <ul>
+        <li><a href="/#today"     data-target="today"><span class="num">01</span><span>Today's edition</span></a></li>
+        <li><a href="/#subscribe" data-target="subscribe"><span class="num">02</span><span>Subscribe</span></a></li>
+        <li><a href="/#how"       data-target="how"><span class="num">03</span><span>How it works</span></a></li>
+        <li><a href="/#faq"       data-target="faq"><span class="num">04</span><span>FAQ</span></a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-secondary">
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">Source on GitHub<span class="gh-stars" id="gh-sidebar-stars"></span></a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-foot">
+      <strong>The Colophon</strong>
+      An indie publication. Open source under MIT. Self-hosted on an always-free VM. No ads, no trackers, nothing sold.
+    </div>
+
+  </aside>
+
+  <!-- ================================ MAIN ================================ -->
+  <main>
     {% block content %}{% endblock %}
   </main>
-  {% endblock %}
 
-  <footer class="site-footer">
-    <div class="site-footer-inner">
-      <div>
-        <div class="brand">The Daily Abstract</div>
-        <p class="tagline">An indie project. Open source. Self-hosted on a free-tier VM.</p>
-      </div>
-      <nav aria-label="Footer">
-        <ul>
-          <li><a href="/privacy">Privacy</a></li>
-          <li><a href="/terms">Terms</a></li>
-          <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
-        </ul>
-      </nav>
-    </div>
-  </footer>
+</div>
 
-  {% block scripts %}{% endblock %}
+<script src="/static/app.js"></script>
 </body>
 </html>

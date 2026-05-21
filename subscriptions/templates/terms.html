@@ -1,72 +1,78 @@
 {% extends "_base.html" %}
-
 {% block title %}Terms — The Daily Abstract{% endblock %}
-
 {% block content %}
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Terms of use</span>
+    </div>
 
-<section class="hero" aria-labelledby="terms-title">
-  <p class="hero-eyebrow">Last updated · {{ today_label }}</p>
-  <h1 id="terms-title" class="hero-title">Terms of use</h1>
-</section>
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Terms of use</p>
+      <h1 id="hero-title" class="hero-title">The <em>fine</em> print.</h1>
+      <p class="hero-lead">
+        You're using a free, open-source service operated by one person on a free-tier VM. The gist: be reasonable, things may break, we owe you nothing.
+      </p>
+    </section>
 
-<article class="prose">
-  <p>
-    The Daily Abstract is offered for free, as-is, by an individual.
-    Here are the basic rules of the road.
-  </p>
+    <article class="prose" style="margin-top: var(--space-section);">
 
-  <h2>What you get</h2>
-  <ul>
-    <li>A daily email digest of new arXiv papers matching the categories
-      and keywords you picked at subscription.</li>
-    <li>The ability to reply with paper numbers and receive the PDFs as
-      attachments.</li>
-    <li>A web interface to manage and unsubscribe at any time.</li>
-  </ul>
+      <h2>The service</h2>
+      <p>The Daily Abstract delivers a daily curated email of new arXiv papers based on your filter. It is provided <strong>as-is</strong>, with no service-level guarantees. Delivery times may vary. The digest may be skipped or delayed if upstream services (arXiv, MyMemory, Brevo, Mailsac) are unavailable.</p>
 
-  <h2>What we don't promise</h2>
-  <ul>
-    <li><strong>No uptime SLA.</strong> The service runs on a free-tier VM
-      and can go down. We do our best.</li>
-    <li><strong>No guarantee of delivery.</strong> Email goes through
-      third-party SMTP providers (Brevo) and can be rate-limited, throttled,
-      or marked as spam by your provider.</li>
-    <li><strong>No guarantee of arXiv coverage.</strong> The arXiv API
-      sometimes rate-limits requests; on those days the digest may be empty
-      or delayed.</li>
-    <li><strong>No warranty.</strong> We provide this service "as is".</li>
-  </ul>
+      <h2>Cost</h2>
+      <p>The basic service is free, forever. There are no plans to charge for it. If the project ever outgrows free-tier infrastructure, we may add a paid tier for power features — but the basic daily digest stays free.</p>
 
-  <h2>Acceptable use</h2>
-  <ul>
-    <li>Use your own email. Don't subscribe other people.</li>
-    <li>Don't try to abuse the subscribe form (we'll block obvious abuse).</li>
-    <li>Don't scrape, automate or republish the digests at scale without
-      asking.</li>
-  </ul>
+      <h2>No warranty</h2>
+      <p>The service is provided "as is" without warranty of any kind. We make no promises about the accuracy or completeness of the arXiv data, the translation quality, or the timeliness of delivery. We are not responsible for any decisions you make based on the contents of any edition.</p>
 
-  <h2>Open source</h2>
-  <p>
-    The code is open source on <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a>.
-    You can self-host your own instance and not depend on us at all.
-  </p>
+      <h2>Acceptable use</h2>
+      <p>Don't:</p>
+      <ul>
+        <li>Subscribe an email address you don't control.</li>
+        <li>Use the service to bulk-scrape arXiv. (It already does that, once, for everyone.)</li>
+        <li>Attempt to bypass the daily cap or rate limits.</li>
+        <li>Reply with anything you wouldn't be comfortable seeing in an email.</li>
+      </ul>
 
-  <h2>Liability</h2>
-  <p>
-    In no event will the project owner be liable for any indirect,
-    incidental or consequential damages arising from use of the service.
-    Maximum aggregate liability: zero dollars (this is a free service).
-  </p>
+      <h2>Termination</h2>
+      <p>You can unsubscribe at any time via the manage link or by replying <em>STOP</em>. We reserve the right to remove subscribers who abuse the service. If we shut the service down entirely (unlikely but possible — it's a hobby project), we will email a 7-day notice when feasible.</p>
 
-  <h2>Changes</h2>
-  <p>
-    We can update these terms at any time. Material changes will be
-    notified to active subscribers by email.
-  </p>
+      <h2>Open source</h2>
+      <p>The entire stack is open source under the MIT license at <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">github.com/f3r21/arxiv-digest</a>. You are welcome and encouraged to self-host your own copy.</p>
 
-  <h2>Contact</h2>
-  <p>
-    Write to the contact in the footer or open an issue on GitHub.
-  </p>
-</article>
+      <h2>Governing law</h2>
+      <p>No specific jurisdiction is asserted. Disputes, if any, will be handled informally between humans.</p>
+
+      <p style="font-style: italic; font-size: var(--text-sm); color: var(--text-faint); margin-top: var(--space-4);">Last updated: {{ today_label }}.</p>
+    </article>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
+    </div>
+
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="#">Terms</a></li>
+            <li><a href="/#subscribe">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

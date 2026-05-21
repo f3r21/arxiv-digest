@@ -1,19 +1,64 @@
 {% extends "_base.html" %}
-
 {% block title %}Link expired — The Daily Abstract{% endblock %}
-
-{% set narrow = true %}
-
 {% block content %}
-<section class="hero" aria-labelledby="exp-title">
-  <p class="hero-eyebrow">Hmm</p>
-  <h1 id="exp-title" class="hero-title">This link is expired or invalid.</h1>
-  <p class="hero-lead">
-    Confirmation links last 48 hours and can only be used once. Manage and
-    unsubscribe links require a valid token. Start a new subscription below.
-  </p>
-  <div class="btn-row">
-    <a href="/" class="btn primary">Subscribe again →</a>
-  </div>
-</section>
+<!-- Folio strip (tweak) -->
+    <div class="folio" aria-hidden="true">
+      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
+      <span class="right">Confirmation expired</span>
+    </div>
+
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow" style="color: var(--danger);">Token expired</p>
+      <h1 id="hero-title" class="hero-title">This <em>link</em> has expired.</h1>
+      <p class="hero-lead">
+        Confirmation links are valid for 48 hours — after that they become inert, so a stale link can't be used by someone else. <span class="muted-inline">Subscribe again to start over.</span>
+      </p>
+
+      <div class="status error" style="margin-top: var(--space-5); padding: var(--space-4);">
+        <div style="font-family: var(--font-serif); font-size: var(--text-lg); margin-bottom: var(--space-2); color: var(--text);">Why this happens</div>
+        <ul style="margin: 0; padding-left: 1.4em; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.7;">
+          <li>The link is older than 48&nbsp;hours.</li>
+          <li>The link was already clicked once (each is single-use).</li>
+          <li>The link was modified in transit (rare, usually an over-zealous email client).</li>
+        </ul>
+      </div>
+
+      <div class="btn-row" style="margin-top: var(--space-5);">
+        <a href="Landing Page.html#subscribe" class="btn primary">← Subscribe again</a>
+        <a href="Landing Page.html" class="ghost-link">Back to landing</a>
+      </div>
+
+      <p class="form-trust" style="margin-top: var(--space-5);">
+        We don't store anything about you between attempts<span class="sep">·</span>Subscribing again creates a fresh record
+      </p>
+    </section>
+
+    <!-- ----------- COLOPHON ----------- -->
+    <div class="colophon">
+      <strong>Colophon</strong>
+      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
+    </div>
+
+    <!-- ----------- FULL FOOTER (tweak) ----------- -->
+    <footer class="full-footer">
+      <div class="full-footer-inner">
+        <div>
+          <div class="brand">The Daily Abstract</div>
+          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
+        </div>
+        <nav aria-label="Footer">
+          <ul>
+            <li><a href="/privacy">Privacy</a></li>
+            <li><a href="/terms">Terms</a></li>
+            <li><a href="/#subscribe">Manage</a></li>
+            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="meta-row">
+        <span>Vol. I · {{ today_label }}</span>
+        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
+        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
+      </div>
+    </footer>
 {% endblock %}

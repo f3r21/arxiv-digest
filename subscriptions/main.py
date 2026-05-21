@@ -77,15 +77,15 @@ async def _rate_limit_handler(_request: Request, exc: RateLimitExceeded) -> JSON
 
 
 # === Quick presets para la landing ===
-# Cada preset agrupa codigos arXiv populares para "Investigador en X".
-# Es solo UI/cliente: el server valida individualmente.
+# IDs coinciden con `data-preset-id` en las templates (Claude Design handoff).
+# Es solo UI/cliente: el server valida individualmente cada codigo.
 PRESETS = [
-    {"id": "ml", "label": "Machine Learning", "codes": ["cs.LG", "cs.AI", "stat.ML"]},
+    {"id": "ml", "label": "Machine Learning", "codes": ["cs.LG", "cs.AI", "stat.ML", "cs.NE"]},
+    {"id": "distsys", "label": "Distributed Systems", "codes": ["cs.DC", "cs.OS", "cs.NI", "cs.SY"]},
+    {"id": "theory", "label": "Theory", "codes": ["cs.CC", "cs.DS", "cs.IT", "cs.GT", "math.CO"]},
     {"id": "nlp", "label": "NLP", "codes": ["cs.CL", "cs.IR"]},
-    {"id": "vision", "label": "Computer Vision", "codes": ["cs.CV", "cs.GR"]},
-    {"id": "systems", "label": "Distributed Systems", "codes": ["cs.DC", "cs.NI", "cs.OS", "cs.PF"]},
-    {"id": "security", "label": "Security", "codes": ["cs.CR", "cs.CY"]},
-    {"id": "theory", "label": "Theory", "codes": ["cs.CC", "cs.DM", "cs.IT", "cs.LO"]},
+    {"id": "cv", "label": "Computer Vision", "codes": ["cs.CV"]},
+    {"id": "sec", "label": "Security", "codes": ["cs.CR"]},
     {"id": "robotics", "label": "Robotics", "codes": ["cs.RO", "cs.SY"]},
 ]
 
@@ -150,15 +150,12 @@ def presets_json() -> list[dict]:
 
 @app.get("/", response_class=HTMLResponse)
 def form_page(request: Request) -> HTMLResponse:
-    preview = _load_preview()
     return templates.TemplateResponse(
         "form.html",
         _common_ctx(
             request,
             grouped_categories=cats.grouped(),
-            presets=PRESETS,
-            presets_json=json.dumps(PRESETS),
-            preview=preview,
+            selected_codes=set(),  # ninguna pre-seleccionada en la landing
         ),
     )
 
@@ -320,12 +317,14 @@ def confirm(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
     )
     logger.info("RESULT: confirm OK %s id=%d", email, sub_id)
     manage_url = f"{PUBLIC_BASE_URL}/manage?token={tokens.make_manage_token(sub_id)}"
+    subscriber = db.get_subscriber_by_id(sub_id)
     return templates.TemplateResponse(
         "confirm_ok.html",
         _common_ctx(
             request,
             email=email,
             categories=payload.get("categories") or [],
+            subscriber=subscriber,
             manage_url=manage_url,
         ),
     )
@@ -402,8 +401,6 @@ def manage_get(
             selected_codes=set(sub.categories),
             keywords_str=", ".join(sub.keywords),
             grouped_categories=cats.grouped(),
-            presets=PRESETS,
-            presets_json=json.dumps(PRESETS),
             token=token,
             unsubscribe_url=f"{PUBLIC_BASE_URL}/unsubscribe?token={unsub_token}",
             saved=bool(saved),
