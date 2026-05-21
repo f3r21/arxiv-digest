@@ -1,13 +1,9 @@
 {% extends "_base.html" %}
 {% block title %}Terms — The Daily Abstract{% endblock %}
+{% block folio_label %}Terms of use{% endblock %}
 {% block description %}Terms of use for The Daily Abstract — a free, open-source arXiv newsletter. Self-hosted, no warranty, one-click unsubscribe.{% endblock %}
 {% block og_description %}Terms of use for The Daily Abstract — a free, open-source arXiv newsletter, MIT-licensed.{% endblock %}
 {% block content %}
-<!-- Folio strip (tweak) -->
-    <div class="folio" aria-hidden="true">
-      <span><strong style="color:var(--text);font-weight:700;">Vol.&nbsp;I</strong><span class="folio-issue-wrap" style="display:none"><span class="sep">·</span><span class="folio-issue"></span></span><span class="sep">·</span>{{ today_label }}</span>
-      <span class="right">Terms of use</span>
-    </div>
 
     <section class="hero" aria-labelledby="hero-title">
       <p class="eyebrow">Terms of use</p>
@@ -49,32 +45,7 @@
       <p style="font-style: italic; font-size: var(--text-sm); color: var(--text-faint); margin-top: var(--space-4);">Last updated: {{ today_label }}.</p>
     </article>
 
-    <!-- ----------- COLOPHON ----------- -->
-    <div class="colophon">
-      <strong>Colophon</strong>
-      Set in Georgia, with system sans for interface chrome and a monospaced stack for code and paper identifiers. Sole accent: amber <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">#D99C5E</code>. Built and served on an always-free VM. The masthead is set 14% letterspaced because newspapers do that and it works.
-    </div>
+    
 
-    <!-- ----------- FULL FOOTER (tweak) ----------- -->
-    <footer class="full-footer">
-      <div class="full-footer-inner">
-        <div>
-          <div class="brand">The Daily Abstract</div>
-          <p class="tagline">A daily edition of new arXiv research, hand-cut to your categories. Indie, open source, MIT-licensed, self-hosted on a free-tier VM.</p>
-        </div>
-        <nav aria-label="Footer">
-          <ul>
-            <li><a href="/privacy">Privacy</a></li>
-            <li><a href="/terms">Terms</a></li>
-            <li><a href="/#subscribe">Manage</a></li>
-            <li><a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">GitHub</a></li>
-          </ul>
-        </nav>
-      </div>
-      <div class="meta-row">
-        <span>Vol. I · {{ today_label }}</span>
-        <span>Self-hosted · 6 Docker containers · Oracle Free Tier</span>
-        <span id="gh-footer-stats">MIT · $0/mo · no ads, no trackers</span>
-      </div>
-    </footer>
+    
 {% endblock %}
