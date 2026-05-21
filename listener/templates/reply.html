@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The Daily Abstract — Your papers</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f1ea;padding:32px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e2dccd;">
+
+          <tr>
+            <td style="padding:36px 40px 22px 40px;border-bottom:2px solid #1a1a1a;text-align:center;">
+              <div style="font-family:Georgia,serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#b97f3d;font-weight:bold;">The Daily Abstract</div>
+              <h1 style="font-family:Georgia,serif;font-size:30px;font-weight:700;margin:8px 0 4px 0;letter-spacing:-0.3px;line-height:1.2;">Your papers, attached.</h1>
+              <div style="font-size:12px;color:#888;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">{{ pdfs|length }} {{ 'PDF' if pdfs|length == 1 else 'PDFs' }} &middot; from edition No. {{ issue_num or '—' }}</div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:28px 40px 4px 40px;font-size:15px;line-height:1.65;color:#444;">
+              You asked for {{ numbers_pretty }}. {{ 'Here it is' if pdfs|length == 1 else 'Here they are' }}, attached to this message.
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:18px 40px 22px 40px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+              {% for p in pdfs %}
+                <tr>
+                  <td style="vertical-align:top;padding:14px 0;border-bottom:{% if not loop.last %}1px solid #e2dccd{% else %}0{% endif %};">
+                    <div style="font-family:Georgia,serif;font-size:13px;color:#b97f3d;font-weight:bold;letter-spacing:1px;margin-bottom:2px;">{{ "%02d"|format(p.number) }}</div>
+                    <div style="font-family:Georgia,serif;font-size:17px;line-height:1.3;color:#1a1a1a;margin-bottom:4px;font-weight:700;">{{ p.title }}</div>
+                    <div style="font-size:12px;color:#888;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">
+                      <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" style="color:#b97f3d;text-decoration:none;">arxiv.org/abs/{{ p.arxiv_id }}</a>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+              </table>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:8px 40px 30px 40px;font-size:13px;line-height:1.6;color:#666;font-style:italic;">
+              Tomorrow at 7 a.m. (your local time) the next edition lands in your inbox.
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:24px 40px 30px 40px;border-top:2px solid #1a1a1a;background:#faf7f0;text-align:center;font-size:12px;color:#888;line-height:1.6;">
+              <div style="margin-bottom:6px;text-transform:uppercase;letter-spacing:3px;color:#b97f3d;font-weight:bold;">The Daily Abstract</div>
+              <div style="font-style:italic;color:#aaa;">A daily edition of new arXiv research, hand-cut to your categories.</div>
+              {% if manage_url or unsubscribe_url %}
+              <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e2dccd;font-size:11px;color:#aaa;">
+                {% if manage_url %}<a href="{{ manage_url }}" style="color:#b97f3d;">Manage subscription</a>{% endif %}
+                {% if manage_url and unsubscribe_url %}<span style="color:#ccc;">&middot;</span>{% endif %}
+                {% if unsubscribe_url %}<a href="{{ unsubscribe_url }}" style="color:#b97f3d;">Unsubscribe</a>{% endif %}
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

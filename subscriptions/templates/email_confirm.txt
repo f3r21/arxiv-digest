@@ -1,16 +1,27 @@
 THE DAILY ABSTRACT
 ==================
 
-You're one click away from receiving The Daily Abstract at
-{{ email }}.
+Welcome aboard.
 
-Categories you selected:
+You're about to start receiving The Daily Abstract at
+{{ email }}. The first edition lands in your inbox tomorrow at
+7 a.m., your local time.
+
+Your selection:
 {% for c in categories %}  - {{ c }}
 {% endfor %}
-To confirm and start receiving the daily edition, open this link
-(valid for 48 hours):
+
+To confirm and start, open this link (valid 48 hours):
 
   {{ confirm_url }}
 
-If this wasn't you, ignore this email and the subscription will not
-activate.
+What you'll get:
+  - One short edition each morning at 7 a.m. with the new arXiv
+    papers in your categories
+  - Titles and abstracts translated to Spanish (originals one
+    link away)
+  - Reply with the numbers of the papers you want; the PDFs come
+    back as attachments, in about thirty seconds
+
+If this wasn't you, ignore this email — the subscription won't
+activate without confirmation.

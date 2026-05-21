@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
 COPY inbox ./inbox
+COPY templates ./templates
 COPY tests ./tests
 
 CMD ["python", "-u", "main.py"]

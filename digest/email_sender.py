@@ -25,6 +25,7 @@ SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "0") == "1"
 FROM_ADDR = os.environ.get("FROM_ADDR", "arxiv-digest@local")
 REPLY_TO = os.environ.get("REPLY_TO", "").strip()
 SUBSCRIPTIONS_DOMAIN = os.environ.get("SUBSCRIPTIONS_DOMAIN", "localhost").strip()
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 # Singleton Jinja env: NO recrear por send (perf con N suscriptores)
@@ -36,7 +37,17 @@ def _wrap_abstract(abstract: str, width: int = 68) -> str:
     return textwrap.indent(wrapped, "    ")
 
 
+def _authors_short(authors: list[str], max_visible: int = 3) -> str:
+    """First N authors + 'et al.' si hay más. 'A. Vaswani, N. Shazeer, N. Parmar et al.'"""
+    if not authors:
+        return ""
+    if len(authors) <= max_visible:
+        return ", ".join(authors)
+    return ", ".join(authors[:max_visible]) + " et al."
+
+
 _env.filters["wrap_abstract"] = _wrap_abstract
+_env.filters["authors_short"] = _authors_short
 
 
 @dataclass(frozen=True)
@@ -57,14 +68,18 @@ def send_digest_to(
     unsubscribe_url = build_unsubscribe_url(subscriber.id)
     manage_url = build_manage_url(subscriber.id)
     context = {
-        "date": date.today().strftime("%d %b %Y"),
+        "date": date.today().strftime("%A, %d %b %Y"),  # weekday + date editorial
+        "date_iso": date.today().isoformat(),  # for read time / archive links
         "papers": papers,
         "omitted": 0,
         "category_label": ", ".join(subscriber.categories),
+        "primary_category": subscriber.categories[0] if subscriber.categories else "",
         "issue": issue,
         "subscriber_email": subscriber.email,
         "unsubscribe_url": unsubscribe_url,
         "manage_url": manage_url,
+        "view_in_browser_url": f"{PUBLIC_BASE_URL}/archive/{subscriber.categories[0]}/{date.today().isoformat()}" if subscriber.categories else f"{PUBLIC_BASE_URL}/preview",
+        "read_time_min": max(1, len(papers) * 3),  # ~3 min per paper estimate
     }
     text_body = _env.get_template("digest.txt").render(**context)
     html_body = _env.get_template("digest.html").render(**context)

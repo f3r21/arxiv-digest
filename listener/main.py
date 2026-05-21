@@ -16,6 +16,7 @@ from inbox import create_backend
 from pdf_downloader import download_pdfs
 from reply_parser import parse_reply
 from subscriber_repo import find_by_email, get_last_digest_for
+from tokens import build_manage_url, build_unsubscribe_url
 
 logger = logging.getLogger("listener")
 logging.basicConfig(
@@ -63,6 +64,8 @@ def _process_message(msg: dict, backend) -> None:
             original_subject=msg.get("subject", ""),
             numbers=numbers,
             pdfs=pdfs,
+            manage_url=build_manage_url(sub.id),
+            unsubscribe_url=build_unsubscribe_url(sub.id),
         )
     mark_processed(msg_id)
     backend.delete_message(msg_id)

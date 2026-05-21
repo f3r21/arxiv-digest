@@ -3,15 +3,15 @@
                   {{ category_label }}
 ================================================
 
-Hoy: {{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}.
-Responde con los numeros para recibir los PDFs.
+Hoy: {{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}{% if read_time_min %}  ·  ~{{ read_time_min }} min de lectura{% endif %}.
+Responde con los números para recibir los PDFs.
 {% if papers %}
 
 --  EDITOR'S PICK  ----------------------------
 
 01   {{ papers[0].title }}
 
-     {{ papers[0].authors|join(', ')|truncate(70) }}
+     {{ papers[0].authors|authors_short }}
      Tag: {{ papers[0].match_reason }}
      arxiv.org/abs/{{ papers[0].arxiv_id }}
 
@@ -21,12 +21,12 @@ Responde con los numeros para recibir los PDFs.
 {% endif %}
 {% if papers|length > 1 %}
 
---  TAMBIEN HOY  ------------------------------
+--  TAMBIÉN HOY  ------------------------------
 {% for p in papers[1:] %}
 
 {{ "%02d"|format(loop.index + 1) }}   {{ p.title }}
 
-     {{ p.authors|join(', ')|truncate(70) }}
+     {{ p.authors|authors_short }}
      Tag: {{ p.match_reason }}
      arxiv.org/abs/{{ p.arxiv_id }}
 
@@ -42,9 +42,12 @@ Responde con los numeros para recibir los PDFs.
 
 ------------------------------------------------
           THE DAILY ABSTRACT  -  {{ category_label }}
-   responde con los numeros para los PDFs
+   responde con los números para los PDFs
 ------------------------------------------------
-
+{% if view_in_browser_url %}
+Ver esta edición online:
+  {{ view_in_browser_url }}
+{% endif %}
 Suscrito como {{ subscriber_email }}.
 Manage subscription:  {{ manage_url }}
 Unsubscribe:          {{ unsubscribe_url }}

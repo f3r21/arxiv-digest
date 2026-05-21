@@ -1,0 +1,18 @@
+THE DAILY ABSTRACT
+==================
+
+Your papers, attached.
+
+You asked for {{ numbers_pretty }}. {{ 'Here it is' if pdfs|length == 1 else 'Here they are' }}, {{ pdfs|length }} {{ 'PDF' if pdfs|length == 1 else 'PDFs' }} attached.
+
+{% for p in pdfs %}
+{{ "%02d"|format(p.number) }}  {{ p.title }}
+    arxiv.org/abs/{{ p.arxiv_id }}
+{% endfor %}
+
+Tomorrow at 7 a.m. (your local time) the next edition lands in your inbox.
+
+------------------------------------------------
+{% if manage_url %}Manage subscription:  {{ manage_url }}
+{% endif %}{% if unsubscribe_url %}Unsubscribe:          {{ unsubscribe_url }}
+{% endif %}

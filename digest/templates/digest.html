@@ -3,10 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The Daily Abstract - {{ date }}</title>
+  <title>The Daily Abstract — {{ date }}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f1ea;font-family:Georgia,'Times New Roman',serif;color:#1a1a1a;">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f1ea;padding:32px 12px;">
+
+  {% if view_in_browser_url %}
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f1ea;">
+    <tr>
+      <td align="center" style="padding:8px 12px 0 12px;font-size:11px;color:#999;font-family:Helvetica,Arial,sans-serif;letter-spacing:0.5px;">
+        Trouble viewing this email? <a href="{{ view_in_browser_url }}" style="color:#b97f3d;text-decoration:underline;">Read it in your browser</a>.
+      </td>
+    </tr>
+  </table>
+  {% endif %}
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f1ea;padding:24px 12px 32px 12px;">
     <tr>
       <td align="center">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e2dccd;">
@@ -22,7 +33,7 @@
 
           <tr>
             <td style="padding:26px 40px 0 40px;font-size:15px;line-height:1.65;color:#444;">
-              Hoy <strong style="color:#1a1a1a;">{{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}</strong>. Responde con los numeros para recibir los PDFs adjuntos.
+              Hoy <strong style="color:#1a1a1a;">{{ papers|length }} {{ 'paper nuevo' if papers|length == 1 else 'papers nuevos' }}</strong>{% if read_time_min %} <span style="color:#888;font-style:italic;">&middot; ~{{ read_time_min }} min de lectura</span>{% endif %}. Responde con los números para recibir los PDFs adjuntos.
             </td>
           </tr>
 
@@ -34,7 +45,7 @@
               <hr style="border:0;border-top:2px solid #1a1a1a;margin:6px 0 22px 0;">
               <div style="font-family:Georgia,serif;font-size:64px;line-height:0.9;color:#e6bc85;font-weight:700;letter-spacing:-2px;">01</div>
               <h2 style="font-family:Georgia,serif;font-size:30px;line-height:1.2;margin:14px 0 14px 0;font-weight:700;color:#1a1a1a;">{{ p.title }}</h2>
-              <div style="font-size:13px;color:#666;margin-bottom:14px;">{{ p.authors|join(', ')|truncate(80) }}</div>
+              <div style="font-size:13px;color:#666;margin-bottom:14px;">{{ p.authors|authors_short }}</div>
               <div style="margin:0 0 22px 0;">
                 <span style="display:inline-block;background:#1a1a1a;color:#f4f1ea;padding:5px 12px;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;">{{ p.match_reason }}</span>
               </div>
@@ -51,7 +62,7 @@
           {% if papers|length > 1 %}
           <tr>
             <td style="padding:40px 40px 0 40px;">
-              <div style="font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#b97f3d;font-weight:bold;">Tambien hoy</div>
+              <div style="font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:#b97f3d;font-weight:bold;">También hoy</div>
               <hr style="border:0;border-top:1px solid #1a1a1a;margin:6px 0 0 0;">
             </td>
           </tr>
@@ -61,7 +72,7 @@
               <div style="font-size:13px;color:#b97f3d;font-weight:bold;letter-spacing:1px;">{{ "%02d"|format(loop.index + 1) }}</div>
               <h3 style="font-family:Georgia,serif;font-size:19px;line-height:1.3;margin:4px 0 8px 0;font-weight:700;color:#1a1a1a;">{{ p.title }}</h3>
               <div style="font-size:13px;color:#666;margin-bottom:10px;">
-                {{ p.authors|join(', ')|truncate(70) }}
+                {{ p.authors|authors_short }}
                 <span style="margin:0 8px;color:#ccc;">&middot;</span>
                 <span style="display:inline-block;background:#f0eadf;color:#5a4d2b;padding:2px 8px;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-family:Helvetica,Arial,sans-serif;vertical-align:1px;">{{ p.match_reason }}</span>
               </div>
@@ -87,8 +98,13 @@
           <tr>
             <td style="padding:30px 40px 36px 40px;border-top:2px solid #1a1a1a;background:#faf7f0;text-align:center;font-size:12px;color:#888;line-height:1.6;">
               <div style="margin-bottom:10px;text-transform:uppercase;letter-spacing:3px;color:#b97f3d;font-weight:bold;">The Daily Abstract</div>
-              <div>Responde a este correo con los numeros de los papers que quieres leer.</div>
-              <div style="margin-top:4px;">El listener te enviara los PDFs adjuntos en ~30 segundos.</div>
+              <div>Responde a este correo con los números de los papers que quieres leer.</div>
+              <div style="margin-top:4px;">El listener te enviará los PDFs adjuntos en ~30 segundos.</div>
+              {% if view_in_browser_url %}
+              <div style="margin-top:14px;font-size:11px;">
+                <a href="{{ view_in_browser_url }}" style="color:#b97f3d;text-decoration:none;">View this edition online &rarr;</a>
+              </div>
+              {% endif %}
               <div style="margin-top:18px;padding-top:14px;border-top:1px solid #e2dccd;font-size:11px;color:#aaa;">
                 Suscrito como <strong style="color:#888;">{{ subscriber_email }}</strong>.
                 <a href="{{ manage_url }}" style="color:#b97f3d;">Manage subscription</a>
