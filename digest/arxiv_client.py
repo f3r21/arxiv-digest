@@ -14,12 +14,13 @@ def _build_search_query(categories: list[str]) -> str:
     """Construye la clausula `search_query=...` para una o varias categorias.
 
     Una sola categoria -> `cat:cs.DC`.
-    Multiples -> `(cat:cs.DC+OR+cat:cs.AI)` (formato URL-encoded de arxiv).
+    Multiples -> `cat:cs.DC+OR+cat:cs.AI` (sin parens — arxiv devuelve 0
+    resultados cuando se le pasan parens en la query, incluso aunque el
+    formato grammatical sea valido).
     """
     if len(categories) == 1:
         return f"cat:{categories[0]}"
-    joined = "+OR+".join(f"cat:{c}" for c in categories)
-    return f"({joined})"
+    return "+OR+".join(f"cat:{c}" for c in categories)
 
 
 def fetch_papers(
