@@ -108,11 +108,12 @@ def seed_from_env() -> None:
     if not seed_cats:
         logger.warning("WARN: SEED_SUBSCRIBER_CATEGORIES vacio o invalido; no seed")
         return
+    seed_max_papers = int(os.environ.get("SEED_SUBSCRIBER_MAX_PAPERS", "4"))
     sub_id = db.insert_subscriber(
         email=email,
         categories=seed_cats,
         keywords=seed_kws[:MAX_KEYWORDS],
-        max_papers=15,
+        max_papers=seed_max_papers,
         source="seed",
     )
     logger.info(
