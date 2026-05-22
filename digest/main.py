@@ -41,6 +41,26 @@ ALIVE_FILE = Path("/tmp/alive")
 PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
 ARCHIVE_DIR = Path("/app/data/archive")
 SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
+HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "").strip()
+
+
+def _ping_healthcheck(status: str = "ok") -> None:
+    """POST a healthchecks.io para reportar success/fail/start.
+
+    status: 'ok' (POST a HEALTHCHECK_URL), 'fail' (POST a /fail), 'start' (/start).
+    Silent fail si HEALTHCHECK_URL no configurado o el ping falla (no debe
+    interrumpir el digest si el monitoring esta caido).
+    """
+    if not HEALTHCHECK_URL:
+        return
+    suffix = "" if status == "ok" else f"/{status}"
+    try:
+        import urllib.request
+        urllib.request.urlopen(
+            HEALTHCHECK_URL + suffix, timeout=10,
+        )
+    except Exception as exc:
+        logger.warning("WARN: healthcheck ping (%s) fallo: %s", status, exc)
 
 
 def _write_archive(papers: list[dict], issue: int) -> None:
@@ -170,9 +190,11 @@ def _papers_for_subscriber(
 
 def run_digest() -> None:
     """Ciclo completo: 1 fetch arXiv -> N filtros/emails -> 1 finalize_issue."""
+    _ping_healthcheck("start")
     subs = list_active_subscribers()
     if not subs:
         logger.info("RESULT: no hay suscriptores activos; skip")
+        _ping_healthcheck("ok")  # OK aunque haya 0 subs (sistema vivo)
         return
     union_cats = sorted({c for s in subs for c in s.categories})
     logger.info(
@@ -182,6 +204,7 @@ def run_digest() -> None:
     raw = fetch_papers(union_cats, max_results=ARXIV_MAX_RESULTS)
     if not raw:
         logger.warning("WARN: arXiv devolvio 0 papers; no se envia digest")
+        _ping_healthcheck("fail")  # arxiv broken / rate-limited
         return
 
     issue = next_issue_number()
@@ -227,6 +250,7 @@ def run_digest() -> None:
         "RESULT: issue %d cerrado; %d suscriptores recibieron %d papers en total",
         issue, sent_count, total_sent,
     )
+    _ping_healthcheck("ok")
 
 
 def main() -> None:
