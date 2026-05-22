@@ -148,6 +148,21 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/slides", response_class=HTMLResponse)
+def slides_redirect() -> RedirectResponse:
+    """Slides de presentacion de clase. HTML standalone con deck-stage.
+
+    Sirve /static/slides/index.html via redirect canonico.
+    Mantener este path estable porque queda en docs/PRESENTATION.md.
+    """
+    return RedirectResponse(url="/static/slides/", status_code=302)
+
+
+@app.get("/slides/")
+def slides_index() -> RedirectResponse:
+    return RedirectResponse(url="/static/slides/index.html", status_code=302)
+
+
 @app.get("/robots.txt", response_class=PlainTextResponse)
 def robots_txt() -> str:
     return (

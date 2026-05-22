@@ -26,6 +26,7 @@ pdfs/*
 .env.prod
 .env.*.local
 
-# Local-only extraction of design handoff zip (zip itself can be committed if desired)
+# Local-only extraction of design handoffs (zip/tar staying outside git)
 _design_handoff/
+_design_handoff_slides/
 The Daily Abstract.zip
