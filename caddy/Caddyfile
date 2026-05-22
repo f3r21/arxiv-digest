@@ -16,11 +16,21 @@
 	}
 
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# HSTS: forzar HTTPS 1 ano. Preload + includeSubDomains para
+		# que browsers nunca lo reviertan a HTTP.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=()"
+		# CSP: solo same-origin para todo salvo imagenes (que pueden venir
+		# de arxiv.org si en el futuro embebemos thumbnails). 'unsafe-inline'
+		# para style/script porque la landing usa inline styles del Claude
+		# Design handoff. Iteracion futura: extraer a externals + drop unsafe.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		# Cross-Origin headers: bloquear sharing al iframe externo
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-site"
 		-Server
 	}
 
