@@ -1,64 +1,62 @@
 """Extrae numeros del cuerpo de un reply.
 
 Acepta '1 3 7', '1, 3, 7', '#1 #3 #7', 'quiero los 2, 5 y 9'.
-Ignora el texto citado que Gmail/Apple Mail/Outlook incluyen debajo del reply:
-- lineas que empiezan con '>'
-- 'On ... wrote:' (Gmail/Apple ingles)
-- 'El ... escribio:' (Gmail espanol — con o sin acento)
-- 'Le ... a ecrit:' (Gmail frances)
-- 'Am ... schrieb:' (Gmail aleman)
-- 'Em ... escreveu:' (Gmail portugues)
-- separators ('---', '___')
-- 'From:' / 'Sent:' / 'De:' / 'Enviado:' headers (Outlook style)
 
-Safety net: si no se detecta quote header, solo lee las primeras 5 lineas
-no-vacias del body (los usuarios responden con los numeros arriba).
+Estrategia (en orden):
+1. Tomar SOLO el primer paragraph (separado por linea vacia) del reply.
+   Esto es robusto a Gmail rompiendo "On ... wrote:" en 2 lineas (bug
+   observado en prod) y a quote headers en cualquier idioma.
+2. Dentro de ese paragraph, quitar lineas que empiezan con '>' (quoted).
+3. Tambien quitar lineas que parecen header "Field: value".
+4. Cap a 10 numeros.
 """
 
 import re
 
-# Quote headers en multiples idiomas. Linea entera.
-_QUOTE_HEADER = re.compile(
-    r"^("
-    r"On .+ wrote:|"                      # Gmail/Apple English
-    r"El .+ escribi[oó]:|"                # Gmail Spanish (con o sin tilde)
-    r"Le .+ a [eé]crit ?:|"               # Gmail French
-    r"Am .+ schrieb .+:|"                 # Gmail German
-    r"Em .+ escreveu:|"                   # Gmail Portuguese
-    r"_{3,}|-{3,}|={3,}"                  # separators (___, ---, ===)
-    r")\s*$",
-    re.MULTILINE | re.IGNORECASE,
+# Detecta linea tipo "Field: ..." (Outlook style + headers en general).
+_HEADER_LINE = re.compile(
+    r"^(From|Sent|To|Subject|De|Enviado|Para|Asunto|On|El|Le|Am|Em):?\s",
+    re.IGNORECASE,
 )
 
-# Outlook headers (mas dificil porque pueden romperse en multiples lineas)
-_OUTLOOK_HEADERS = re.compile(
-    r"^(From|Sent|To|Subject|De|Enviado|Para|Asunto):\s+.+$",
-    re.MULTILINE | re.IGNORECASE,
-)
-
-_MAX_LINES_NO_QUOTE = 5  # safety net: si no hay quote header, solo primeras N lineas
+# Separators ("---", "___", "===" de 3+ chars)
+_SEPARATOR_LINE = re.compile(r"^[_\-=]{3,}\s*$")
 
 
 def _strip_quoted(body: str) -> str:
-    """Devuelve solo la parte nueva del reply, sin el texto citado."""
-    # 1) Cortar en el primer quote header detectado
-    cut = _QUOTE_HEADER.search(body)
-    if cut:
-        body = body[: cut.start()]
-    else:
-        # 2) Cortar en el primer Outlook-style header
-        cut = _OUTLOOK_HEADERS.search(body)
-        if cut:
-            body = body[: cut.start()]
-        else:
-            # 3) Safety net: si no detectamos quote, solo primeras 5 lineas no-vacias
-            non_empty = [l for l in body.splitlines() if l.strip()]
-            body = "\n".join(non_empty[:_MAX_LINES_NO_QUOTE])
+    """Devuelve solo la parte nueva del reply.
 
-    # 4) Quitar lineas que empiezan con '>'
-    return "\n".join(
-        line for line in body.splitlines() if not line.lstrip().startswith(">")
-    )
+    Heuristica robusta: el primer paragraph (antes del primer doble salto
+    de linea) es el reply del usuario. Todo lo que viene despues es el
+    quoted original que el email client agrego. Esto evita bugs cuando
+    el quote header se rompe en multiples lineas (Gmail con line-wrap).
+    """
+    # Normalizar line endings
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Tomar solo el primer paragraph no-vacio
+    paragraphs = re.split(r"\n\s*\n", body)
+    first = ""
+    for p in paragraphs:
+        if p.strip():
+            first = p
+            break
+
+    # Dentro de ese paragraph, filtrar lineas quoted (>) o que parezcan headers
+    keep = []
+    for line in first.splitlines():
+        stripped = line.lstrip()
+        if not stripped:
+            continue
+        if stripped.startswith(">"):
+            continue
+        if _HEADER_LINE.match(stripped):
+            # Si la PRIMERA linea es un header, dropear todo (no hay reply)
+            continue
+        if _SEPARATOR_LINE.match(stripped):
+            break
+        keep.append(line)
+    return "\n".join(keep)
 
 
 def parse_reply(body: str) -> list[int]:
