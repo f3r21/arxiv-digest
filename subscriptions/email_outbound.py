@@ -8,6 +8,8 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
+import tokens
+
 logger = logging.getLogger("subscriptions")
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "mailhog")
@@ -41,8 +43,10 @@ def _send(to_addr: str, subject: str, text_body: str, html_body: str) -> None:
 
 def send_confirmation(to_addr: str, token: str, categories: list[str]) -> None:
     confirm_url = f"{PUBLIC_BASE_URL}/confirm?token={token}"
+    not_me_url = f"{PUBLIC_BASE_URL}/not-me?token={tokens.make_not_me_token(to_addr)}"
     ctx = {
         "confirm_url": confirm_url,
+        "not_me_url": not_me_url,
         "categories": categories,
         "email": to_addr,
     }

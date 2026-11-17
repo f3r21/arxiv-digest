@@ -230,3 +230,105 @@ def test_failed_send_does_not_use_up_the_recipient_budget(client, monkeypatch):
     r = c.post("/subscribe", data={"email": "retry@example.com", **FORM})
     assert r.status_code == 202
     assert sent == [{"to": "retry@example.com"}]
+
+
+# === "This wasn't me" link ===
+
+
+def test_not_me_token_roundtrip_normalizes_email():
+    t = tokens.make_not_me_token(" Victim@Example.com ")
+    assert tokens.read_not_me_token(t) == "victim@example.com"
+
+
+def test_not_me_token_rejects_tokens_of_other_purposes():
+    assert tokens.read_not_me_token(tokens.make_confirm_token("v@example.com")) is None
+    assert tokens.read_not_me_token(tokens.make_unsubscribe_token(1)) is None
+    assert tokens.read_not_me_token(tokens.make_manage_token(1)) is None
+    assert tokens.read_not_me_token("garbage") is None
+
+
+def test_not_me_token_is_not_accepted_elsewhere():
+    t = tokens.make_not_me_token("v@example.com")
+    assert tokens.read_confirm_token(t) is None
+    assert tokens.read_unsubscribe_token(t) is None
+    assert tokens.read_manage_token(t) is None
+
+
+def test_suppressed_recipient_gets_no_more_confirmations():
+    db.suppress_confirmations(ALICE)
+    blocked = _reserve(ALICE, T0 + timedelta(days=30))
+    assert not blocked.allowed
+    assert blocked.reason == "suppressed"
+    assert _reserve("b" * 64, T0).allowed
+
+
+VICTIM = "victim@example.com"
+
+
+def _subscribe_victim(c, sent) -> str:
+    """Trigger one confirmation email to VICTIM; return its confirm token."""
+    r = c.post("/subscribe", data={"email": VICTIM, **FORM})
+    assert r.status_code == 202
+    return sent[-1]["token"]
+
+
+def test_not_me_get_only_asks_for_confirmation(client):
+    c, sent = client
+    confirm_token = _subscribe_victim(c, sent)
+
+    r = c.get("/not-me", params={"token": tokens.make_not_me_token(VICTIM)})
+    assert r.status_code == 200
+    assert 'method="post"' in r.text.lower()
+
+    # A link scanner fetching the URL must not cancel anything.
+    assert c.get("/confirm", params={"token": confirm_token}).status_code == 200
+
+
+def test_not_me_post_cancels_pending_and_suppresses_future_emails(client):
+    c, sent = client
+    confirm_token = _subscribe_victim(c, sent)
+
+    r = c.post("/not-me", data={"token": tokens.make_not_me_token(VICTIM)})
+    assert r.status_code == 200
+
+    assert c.get("/confirm", params={"token": confirm_token}).status_code == 400
+    later = T0 + timedelta(days=60)
+    decision = _reserve(tokens.email_hmac(VICTIM), later)
+    assert not decision.allowed
+    assert decision.reason == "suppressed"
+
+
+def test_not_me_post_rejects_tokens_of_other_purposes(client):
+    c, sent = client
+    confirm_token = _subscribe_victim(c, sent)
+
+    for wrong in (
+        confirm_token,
+        tokens.make_unsubscribe_token(1),
+        tokens.make_manage_token(1),
+        "garbage",
+    ):
+        r = c.post("/not-me", data={"token": wrong})
+        assert r.status_code == 400
+
+    # Nothing was cancelled or suppressed.
+    assert c.get("/confirm", params={"token": confirm_token}).status_code == 200
+
+
+def test_confirmation_email_carries_a_not_me_link(monkeypatch):
+    import re
+
+    import email_outbound
+
+    outbox: list[dict] = []
+    monkeypatch.setattr(
+        email_outbound,
+        "_send",
+        lambda to, subject, text, html: outbox.append({"text": text, "html": html}),
+    )
+    email_outbound.send_confirmation(VICTIM, "confirm-token", ["cs.DC"])
+
+    for body in ("text", "html"):
+        match = re.search(r"/not-me\?token=([\w.\-]+)", outbox[0][body])
+        assert match, f"no not-me link in the {body} body"
+        assert tokens.read_not_me_token(match.group(1)) == VICTIM

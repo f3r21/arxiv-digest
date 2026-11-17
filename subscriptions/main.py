@@ -176,6 +176,7 @@ def robots_txt() -> str:
         "Disallow: /confirm\n"
         "Disallow: /manage\n"
         "Disallow: /unsubscribe\n"
+        "Disallow: /not-me\n"
         "Disallow: /admin/\n"
         "Disallow: /health\n"
         "Disallow: /categories.json\n"
@@ -407,6 +408,36 @@ def confirm(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
             subscriber=subscriber,
             manage_url=manage_url,
         ),
+    )
+
+
+# === "This wasn't me" (link in the confirmation email) ===
+
+
+@app.get("/not-me", response_class=HTMLResponse)
+def not_me_get(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
+    """Ask before acting: mail scanners prefetch GET links."""
+    if tokens.read_not_me_token(token) is None:
+        return templates.TemplateResponse(
+            request, "not_me.html", _common_ctx(request, state="invalid"), status_code=400
+        )
+    return templates.TemplateResponse(
+        request, "not_me.html", _common_ctx(request, state="ask", token=token)
+    )
+
+
+@app.post("/not-me", response_class=HTMLResponse)
+def not_me_post(request: Request, token: Annotated[str, Form()]) -> HTMLResponse:
+    email = tokens.read_not_me_token(token)
+    if email is None:
+        return templates.TemplateResponse(
+            request, "not_me.html", _common_ctx(request, state="invalid"), status_code=400
+        )
+    db.suppress_confirmations(tokens.email_hmac(email))
+    cancelled = db.delete_pending_for_email(email)
+    logger.info("RESULT: not-me suppression stored; pending cancelled=%d", cancelled)
+    return templates.TemplateResponse(
+        request, "not_me.html", _common_ctx(request, state="done")
     )
 
 

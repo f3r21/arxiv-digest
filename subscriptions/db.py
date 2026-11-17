@@ -113,6 +113,13 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_confirmation_sends_sent_at
                 ON confirmation_sends(sent_at);
+
+            -- Recipients who followed "this wasn't me": no more
+            -- confirmation emails. Same HMAC key as confirmation_sends.
+            CREATE TABLE IF NOT EXISTS confirmation_suppressions (
+                recipient_hmac TEXT PRIMARY KEY,
+                created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
         """)
         _drop_legacy_pending_ip_column(c)
 
@@ -276,6 +283,16 @@ def prune_expired_pending(ttl_hours: int, now: datetime | None = None) -> int:
         return cur.rowcount
 
 
+def delete_pending_for_email(email: str) -> int:
+    """Drop every pending confirmation for an address; returns rows deleted."""
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM pending_confirmations WHERE email = ?",
+            (email.strip().lower(),),
+        )
+        return cur.rowcount
+
+
 def pop_pending(token_hash: str) -> dict | None:
     with _conn() as c:
         row = c.execute(
@@ -310,6 +327,12 @@ def reserve_confirmation_send(
             "DELETE FROM confirmation_sends WHERE sent_at <= ?",
             (_sql_utc(now - timedelta(days=7)),),
         )
+        suppressed = c.execute(
+            "SELECT 1 FROM confirmation_suppressions WHERE recipient_hmac = ?",
+            (recipient_hmac,),
+        ).fetchone()
+        if suppressed:
+            return SendDecision(allowed=False, reason="suppressed")
         last_24h, last_7d = c.execute(
             """
             SELECT COALESCE(SUM(sent_at > ?), 0), COUNT(*)
@@ -336,6 +359,15 @@ def reserve_confirmation_send(
             (recipient_hmac, _sql_utc(now)),
         )
         return SendDecision(allowed=True, reason="ok", send_id=int(cur.lastrowid))
+
+
+def suppress_confirmations(recipient_hmac: str) -> None:
+    """Stop all future confirmation emails to this recipient."""
+    with _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO confirmation_suppressions (recipient_hmac) VALUES (?)",
+            (recipient_hmac,),
+        )
 
 
 def release_confirmation_send(send_id: int) -> None:
