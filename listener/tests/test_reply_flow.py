@@ -39,3 +39,25 @@ def test_reply_lists_links_and_attaches_nothing(inbox, smtp, add_subscriber):
     assert "attached" not in text.lower()
     assert db.is_processed("m1")
     assert inbox.deleted == ["m1"]
+
+
+def test_reply_quotes_only_delivered_numbers(inbox, smtp, add_subscriber):
+    add_subscriber("ana@example.com", PAPERS)
+    inbox.add("m1", "ana@example.com", "2 9 3")
+
+    main.poll_once(inbox)
+
+    text, html = _bodies(smtp.outbox[0])
+    for body in (text, html):
+        assert "You asked for papers 2 and 3." in body
+    assert "2 papers" in smtp.outbox[0]["Subject"]
+
+
+def test_no_reply_when_no_number_is_in_range(inbox, smtp, add_subscriber):
+    add_subscriber("ana@example.com", PAPERS)
+    inbox.add("m1", "ana@example.com", "8 9")
+
+    main.poll_once(inbox)
+
+    assert smtp.outbox == []
+    assert db.is_processed("m1")

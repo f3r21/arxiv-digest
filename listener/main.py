@@ -82,7 +82,6 @@ def _process_message(msg: dict, backend: InboxBackend) -> None:
         send_reply(
             to_addr=sub.email,
             original_subject=msg.get("subject", ""),
-            numbers=numbers,
             papers=papers,
             manage_url=build_manage_url(sub.id),
             unsubscribe_url=build_unsubscribe_url(sub.id),

@@ -43,14 +43,14 @@ def _extract_issue_num(subject: str) -> str | None:
 def send_reply(
     to_addr: str,
     original_subject: str,
-    numbers: list[int],
     papers: list[dict[str, Any]],
     manage_url: str | None = None,
     unsubscribe_url: str | None = None,
 ) -> None:
     """Compose and send the reply listing each paper with its arXiv abs and PDF links.
 
-    `papers` items carry `number`, `title` and `arxiv_id`. Nothing is attached:
+    `papers` items carry `number`, `title` and `arxiv_id`; only their numbers
+    are quoted, so out-of-range requests never appear. Nothing is attached:
     papers are linked until per-paper licenses are stored. SMTP errors propagate.
     """
     subject_clean = original_subject.replace("Re: ", "").replace("RE: ", "")
@@ -58,7 +58,7 @@ def send_reply(
     subject = f"Re: {subject_clean} — {len(papers)} {noun}"
 
     context = {
-        "numbers_pretty": _pretty_numbers(numbers),
+        "numbers_pretty": _pretty_numbers([p["number"] for p in papers]),
         "papers": papers,
         "issue_num": _extract_issue_num(original_subject),
         "manage_url": manage_url,
