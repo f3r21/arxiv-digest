@@ -7,6 +7,7 @@ sender with the arXiv links of those papers. Unknown senders are dropped.
 
 import logging
 import os
+import smtplib
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -109,13 +110,22 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
         logger.warning("WARN: sub=%d hit the %s; no reply for msg %s", sub.id, cap, msg_id)
         _finish(msg_id, backend)
         return
-    send_reply(
-        to_addr=sub.email,
-        original_subject=msg.get("subject", ""),
-        papers=papers,
-        manage_url=build_manage_url(sub.id),
-        unsubscribe_url=build_unsubscribe_url(sub.id),
-    )
+    try:
+        send_reply(
+            to_addr=sub.email,
+            original_subject=msg.get("subject", ""),
+            papers=papers,
+            manage_url=build_manage_url(sub.id),
+            unsubscribe_url=build_unsubscribe_url(sub.id),
+        )
+    except (smtplib.SMTPException, OSError) as exc:
+        # Terminal: retrying every poll could resend or loop forever on a rejection.
+        logger.error(
+            "ERROR: SMTP send failed for sub=%d msg %s, not retrying: %s",
+            sub.id, msg_id, exc,
+        )
+        _finish(msg_id, backend)
+        return
     record_reply_sent(msg_id, sub.id, now)
     backend.delete_message(msg_id)
 
