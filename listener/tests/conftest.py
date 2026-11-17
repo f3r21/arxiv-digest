@@ -17,6 +17,7 @@ class FakeInbox:
     def __init__(self) -> None:
         self.messages: dict[str, dict] = {}
         self.deleted: list[str] = []
+        self.fetched: list[str] = []
 
     def add(self, msg_id: str, sender: str, body: str,
             subject: str = "Re: The Daily Abstract No. 7 - cs.LG") -> None:
@@ -35,6 +36,7 @@ class FakeInbox:
         ]
 
     def fetch_body(self, msg_id: str) -> str:
+        self.fetched.append(msg_id)
         return self.messages[msg_id]["body"]
 
     def delete_message(self, msg_id: str) -> None:

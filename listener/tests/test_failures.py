@@ -110,3 +110,41 @@ def test_snapshot_lookup_is_empty_when_table_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(subscriber_repo, "DB_PATH", tmp_path / "empty.db")
 
     assert subscriber_repo.get_last_digest_for(1) == []
+
+
+def test_subject_with_line_break_is_replied_and_processed_in_one_poll(
+    inbox, smtp, add_subscriber
+):
+    add_subscriber("ana@example.com", PAPERS)
+    # A decoded RFC 2047 subject can carry CR/LF, which EmailMessage rejects in headers.
+    inbox.add("m1", "ana@example.com", "1",
+              subject="Re: The Daily Abstract No. 7\r\nBcc: x@example.com")
+
+    main.poll_once(inbox)
+    main.poll_once(inbox)
+
+    assert db.is_processed("m1")
+    assert inbox.fetched == ["m1"]
+    assert len(smtp.outbox) == 1
+    subject = smtp.outbox[0]["Subject"]
+    assert "\n" not in subject and "\r" not in subject
+    assert smtp.outbox[0]["Bcc"] is None
+
+
+def test_unexpected_error_is_terminal_for_the_message(
+    inbox, smtp, add_subscriber, caplog
+):
+    # A snapshot whose entries are not objects makes paper selection blow up.
+    sub_id = add_subscriber("ana@example.com", [1, 2])
+    inbox.add("m1", "ana@example.com", "1")
+
+    with caplog.at_level(logging.ERROR, logger="listener"):
+        main.poll_once(inbox)
+    inbox.add("m1", "ana@example.com", "1")  # a backend that failed to delete it
+    main.poll_once(inbox)
+
+    assert db.is_processed("m1")
+    assert inbox.fetched == ["m1"]
+    assert smtp.outbox == []
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert any(f"sub={sub_id}" in e and "m1" in e for e in errors)

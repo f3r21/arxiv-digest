@@ -8,6 +8,7 @@ sender with the arXiv links of those papers. Unknown senders are dropped.
 import logging
 import os
 import smtplib
+import sqlite3
 import sys
 import time
 from datetime import datetime, timezone
@@ -27,7 +28,7 @@ from db import (
 from email_sender import send_reply
 from inbox import InboxBackend, create_backend
 from reply_parser import parse_reply
-from subscriber_repo import find_by_email, get_last_digest_for
+from subscriber_repo import Subscriber, find_by_email, get_last_digest_for
 from tokens import build_manage_url, build_unsubscribe_url
 
 logger = logging.getLogger("listener")
@@ -70,9 +71,30 @@ def _describe_smtp_error(exc: BaseException) -> str:
     return f"{type(exc).__name__} {code}" if code else type(exc).__name__
 
 
+# Errors worth another try on the next poll: a locked or busy SQLite file, or
+# an inbox API outage. Anything else would fail the same way every poll and,
+# with Mailsac, re-fetch the body each time, so it is terminal for the message.
+TRANSIENT_ERRORS: tuple[type[BaseException], ...] = (
+    sqlite3.OperationalError,
+    requests.RequestException,
+)
+
+
 def _finish(msg_id: str, backend: InboxBackend) -> None:
     mark_processed(msg_id)
     backend.delete_message(msg_id)
+
+
+def _finish_best_effort(msg_id: str, backend: InboxBackend) -> None:
+    """Mark processed and delete, logging instead of raising: used on error paths."""
+    try:
+        mark_processed(msg_id)
+    except Exception as exc:
+        logger.error("ERROR: could not mark msg %s processed: %s", msg_id, exc)
+    try:
+        backend.delete_message(msg_id)
+    except Exception as exc:
+        logger.error("ERROR: could not delete msg %s: %s", msg_id, exc)
 
 
 def _cap_reached(subscriber_id: int, now: datetime) -> str | None:
@@ -93,6 +115,20 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
         logger.info("PROFILE: unknown sender, dropping msg %s", msg_id)
         _finish(msg_id, backend)
         return
+    try:
+        _reply_to(sub, msg, backend, now)
+    except TRANSIENT_ERRORS:
+        raise
+    except Exception as exc:
+        logger.error(
+            "ERROR: msg %s from sub=%d failed, not retrying: %s: %s",
+            msg_id, sub.id, type(exc).__name__, exc,
+        )
+        _finish_best_effort(msg_id, backend)
+
+
+def _reply_to(sub: Subscriber, msg: dict, backend: InboxBackend, now: datetime) -> None:
+    msg_id = msg["id"]
     # Fetched only for known senders: each body costs a Mailsac API call.
     numbers = parse_reply(backend.fetch_body(msg_id))
     if not numbers:
@@ -152,8 +188,9 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
 def poll_once(backend: InboxBackend, now: datetime | None = None) -> int:
     """Process every unprocessed message currently in the inbox.
 
-    A listing error propagates. An error on one message (body fetch, locked DB)
-    is logged and leaves that message unprocessed for the next poll.
+    A listing error propagates. A transient error on one message (inbox API
+    outage, locked DB) is logged and leaves it unprocessed for the next poll;
+    any other error is logged and the message is marked processed and deleted.
     `now` (timezone-aware) dates the replies for the daily caps; defaults to the current time.
     Returns the number of messages left for retry.
     """
@@ -163,12 +200,18 @@ def poll_once(backend: InboxBackend, now: datetime | None = None) -> int:
             continue
         try:
             _process_message(msg, backend, now or datetime.now(timezone.utc))
-        except Exception as exc:
+        except TRANSIENT_ERRORS as exc:
             failed += 1
             logger.error(
                 "ERROR: processing msg %s failed, retrying next poll: %s",
                 msg.get("id"), exc,
             )
+        except Exception as exc:
+            logger.error(
+                "ERROR: processing msg %s failed, not retrying: %s: %s",
+                msg.get("id"), type(exc).__name__, exc,
+            )
+            _finish_best_effort(msg["id"], backend)
     return failed
 
 

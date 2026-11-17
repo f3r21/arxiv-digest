@@ -53,7 +53,10 @@ def send_reply(
     are quoted, so out-of-range requests never appear. Nothing is attached:
     papers are linked until per-paper licenses are stored. SMTP errors propagate.
     """
-    subject_clean = original_subject.replace("Re: ", "").replace("RE: ", "")
+    # The inbound subject is untrusted: a decoded CR/LF would make EmailMessage
+    # reject the header (or, elsewhere, inject one), so fold it onto one line.
+    subject_clean = " ".join(original_subject.split())
+    subject_clean = subject_clean.replace("Re: ", "").replace("RE: ", "")
     noun = "paper" if len(papers) == 1 else "papers"
     subject = f"Re: {subject_clean} — {len(papers)} {noun}"
 
