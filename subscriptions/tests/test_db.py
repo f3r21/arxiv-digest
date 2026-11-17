@@ -70,4 +70,3 @@ def test_pending_confirmation_roundtrip():
 
 def test_pop_missing_pending_returns_none():
     assert db.pop_pending("nope") is None
-

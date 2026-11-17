@@ -374,4 +374,3 @@ def release_confirmation_send(send_id: int) -> None:
     """Undo a reservation whose email could not be sent."""
     with _conn() as c:
         c.execute("DELETE FROM confirmation_sends WHERE id = ?", (send_id,))
-
