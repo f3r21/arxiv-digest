@@ -159,6 +159,44 @@ def insert_subscriber(
         return int(row["id"])
 
 
+def _purge_in(c: sqlite3.Connection, subscriber_id: int) -> bool:
+    """Delete the subscriber and every row about them on connection `c`.
+
+    Explicit DELETEs instead of ON DELETE CASCADE: digest re-declares its
+    tables without foreign keys, so the cascade cannot be relied on.
+    """
+    row = c.execute(
+        "SELECT email FROM subscribers WHERE id = ?", (subscriber_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    email = str(row["email"])
+    c.execute(
+        "DELETE FROM subscriber_seen_papers WHERE subscriber_id = ?",
+        (subscriber_id,),
+    )
+    c.execute(
+        "DELETE FROM subscriber_last_digest WHERE subscriber_id = ?",
+        (subscriber_id,),
+    )
+    c.execute("DELETE FROM pending_confirmations WHERE email = ?", (email,))
+    c.execute("DELETE FROM subscribe_attempts WHERE email = ?", (email,))
+    c.execute("DELETE FROM subscribers WHERE id = ?", (subscriber_id,))
+    return True
+
+
+def purge_subscriber(subscriber_id: int) -> bool:
+    """Hard-delete a subscriber and all their data in one transaction.
+
+    Returns False when the id does not exist (already purged).
+    """
+    with _conn() as c:
+        # Take the write lock before the SELECT so the lookup and the
+        # DELETEs form one atomic unit.
+        c.execute("BEGIN IMMEDIATE")
+        return _purge_in(c, subscriber_id)
+
+
 def soft_delete_subscriber(subscriber_id: int) -> None:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with _conn() as c:

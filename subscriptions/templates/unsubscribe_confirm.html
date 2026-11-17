@@ -1,0 +1,25 @@
+{% extends "_base.html" %}
+{% block title %}Unsubscribe — The Daily Abstract{% endblock %}
+{% block folio_label %}Unsubscribe{% endblock %}
+{% block content %}
+
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">Unsubscribe</p>
+      <h1 id="hero-title" class="hero-title">Leave the <em>list</em>?</h1>
+      <p class="hero-lead">
+        Confirm below to stop the daily edition for <strong>{{ email }}</strong>. <span class="muted-inline">Your address, your filter and your reading history are deleted right away. Nothing happens until you press the button.</span>
+      </p>
+
+      <form method="post" action="{{ unsubscribe_action }}" style="margin-top: var(--space-5);">
+        <div class="btn-row">
+          <button type="submit" class="btn primary">Unsubscribe and delete my data</button>
+          <a href="/" class="ghost-link">Keep my subscription</a>
+        </div>
+      </form>
+
+      <p class="form-trust" style="margin-top: var(--space-5);">
+        One step<span class="sep">·</span>No login<span class="sep">·</span>You can subscribe again at any time
+      </p>
+    </section>
+
+{% endblock %}

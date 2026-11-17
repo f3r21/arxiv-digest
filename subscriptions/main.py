@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 from typing import Annotated, AsyncIterator
+from urllib.parse import quote
 
 from email_validator import EmailNotValidError, validate_email
 from fastapi import FastAPI, Form, HTTPException, Query, Request
@@ -395,44 +396,55 @@ def confirm(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
     )
 
 
-# === Unsubscribe (existente, sin cambios funcionales) ===
-
-
-def _do_unsubscribe(token: str) -> int | None:
-    sub_id = tokens.read_unsubscribe_token(token)
-    if sub_id is None:
-        return None
-    sub = db.get_subscriber_by_id(sub_id)
-    if sub is None:
-        return None
-    db.soft_delete_subscriber(sub_id)
-    logger.info("RESULT: unsubscribed id=%d email=%s", sub_id, sub.email)
-    return sub_id
+# === Unsubscribe: GET confirms, POST hard-deletes ===
 
 
 @app.get("/unsubscribe", response_class=HTMLResponse)
 def unsubscribe_get(
     request: Request, token: Annotated[str, Query()]
 ) -> HTMLResponse:
-    sub_id = _do_unsubscribe(token)
-    if sub_id is None:
+    """Confirmation page only. GET must not unsubscribe: mail link scanners
+    and prefetchers follow GET links, so the deletion waits for a POST."""
+    sub_id = tokens.read_unsubscribe_token(token)
+    sub = db.get_subscriber_by_id(sub_id) if sub_id is not None else None
+    if sub is None:
         return templates.TemplateResponse(
             "confirm_expired.html",
             _common_ctx(request),
             status_code=400,
         )
     return templates.TemplateResponse(
-        "unsubscribed.html", _common_ctx(request)
+        "unsubscribe_confirm.html",
+        _common_ctx(
+            request,
+            email=sub.email,
+            unsubscribe_action=f"/unsubscribe?token={quote(token, safe='')}",
+        ),
     )
 
 
-@app.post("/unsubscribe")
-def unsubscribe_post(token: Annotated[str, Query()]) -> JSONResponse:
-    """One-click List-Unsubscribe-Post handler (RFC 8058)."""
-    sub_id = _do_unsubscribe(token)
-    if sub_id is None:
-        return JSONResponse({"status": "invalid_token"}, status_code=400)
-    return JSONResponse({"status": "unsubscribed"})
+@app.post("/unsubscribe", response_class=HTMLResponse)
+def unsubscribe_post(
+    request: Request, token: Annotated[str, Query()]
+) -> HTMLResponse:
+    """Delete the subscriber and all their data.
+
+    Serves both the confirmation form and RFC 8058 one-click: the mailbox
+    provider POSTs the List-Unsubscribe URI (token in the query string) with
+    body `List-Unsubscribe=One-Click`. The body is not required, so the
+    browser form needs no extra fields.
+    """
+    sub_id = tokens.read_unsubscribe_token(token)
+    if sub_id is None or not db.purge_subscriber(sub_id):
+        return templates.TemplateResponse(
+            "confirm_expired.html",
+            _common_ctx(request),
+            status_code=400,
+        )
+    logger.info("RESULT: unsubscribed and purged id=%d", sub_id)
+    return templates.TemplateResponse(
+        "unsubscribed.html", _common_ctx(request)
+    )
 
 
 # === Manage subscription ===
