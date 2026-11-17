@@ -8,10 +8,11 @@ sender with the arXiv links of those papers. Unknown senders are dropped.
 import logging
 import os
 import smtplib
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from db import (
     count_replies_sent,
@@ -147,9 +148,26 @@ def poll_once(backend: InboxBackend, now: datetime | None = None) -> None:
             logger.error("ERROR: procesando msg %s: %s", msg.get("id"), exc)
 
 
+def startup_guard(
+    backend: InboxBackend, sleep: Callable[[float], None] = time.sleep
+) -> None:
+    """Exit with status 1 unless the inbox is verified private.
+
+    The exit is delayed by one poll interval so that Docker's restart policy
+    cannot turn a failing check into a fast loop of billed Mailsac calls.
+    """
+    try:
+        backend.verify_private()
+    except Exception as exc:
+        logger.error("ERROR: inbox guard refused to start: %s", exc)
+        sleep(POLL_INTERVAL_S)
+        sys.exit(1)
+
+
 def main() -> None:
     init_db()
     backend = create_backend()
+    startup_guard(backend)
     ALIVE_FILE.touch(exist_ok=True)
     logger.info(
         "INIT: listener arrancado, backend=%s polling cada %ss",

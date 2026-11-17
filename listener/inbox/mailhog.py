@@ -35,6 +35,9 @@ class MailhogBackend:
             self_addr=os.environ.get("SELF_ADDR", "arxiv-digest@local"),
         )
 
+    def verify_private(self) -> None:
+        """Nothing to verify: MailHog is a local dev inbox."""
+
     def list_messages(self) -> list[dict]:
         r = requests.get(self.list_url, timeout=5)
         r.raise_for_status()

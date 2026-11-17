@@ -4,7 +4,7 @@ import os
 
 from .base import InboxBackend
 from .mailhog import MailhogBackend
-from .mailsac import MailsacBackend
+from .mailsac import InboxGuardError, MailsacBackend
 
 
 def create_backend() -> InboxBackend:
@@ -17,4 +17,10 @@ def create_backend() -> InboxBackend:
     raise ValueError(f"Unknown INBOX_BACKEND: {name}")
 
 
-__all__ = ["InboxBackend", "MailhogBackend", "MailsacBackend", "create_backend"]
+__all__ = [
+    "InboxBackend",
+    "InboxGuardError",
+    "MailhogBackend",
+    "MailsacBackend",
+    "create_backend",
+]

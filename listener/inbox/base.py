@@ -16,6 +16,10 @@ from typing import Protocol
 class InboxBackend(Protocol):
     """Structural protocol: any object with these methods qualifies."""
 
+    def verify_private(self) -> None:
+        """Raise unless the inbox is private to this deployment. Called once at startup."""
+        ...
+
     def list_messages(self) -> list[dict]:
         """Return message metadata (no body). Raises on network or HTTP errors."""
         ...

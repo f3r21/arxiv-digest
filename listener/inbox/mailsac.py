@@ -10,6 +10,10 @@ import requests
 logger = logging.getLogger("listener")
 
 
+class InboxGuardError(RuntimeError):
+    """The configured inbox is not a private address owned by this API key's account."""
+
+
 @dataclass(frozen=True)
 class MailsacBackend:
     """Client for the Mailsac REST API (live mode).
@@ -20,6 +24,7 @@ class MailsacBackend:
       GET    /addresses/{inbox}/messages          - message metadata
       GET    /text/{inbox}/{msg_id}               - plain-text body
       DELETE /addresses/{inbox}/messages/{msg_id} - delete the message
+      GET    /addresses/{inbox}                   - ownership check at startup
     """
 
     base_url: str
@@ -41,6 +46,26 @@ class MailsacBackend:
 
     def _headers(self) -> dict[str, str]:
         return {"Mailsac-Key": self.api_key, "Accept": "application/json"}
+
+    def verify_private(self) -> None:
+        """Raise InboxGuardError unless the inbox is owned (hence private) by this account.
+
+        Mailsac answers 200 with an `owner` key for an owned address, 200 without
+        it for a public one, and 401 when another account owns it. Anything that
+        cannot be verified (404, 5xx, network) also fails closed: a public inbox
+        would expose subscribers' replies to anyone.
+        """
+        url = f"{self.base_url}/addresses/{self.inbox}"
+        try:
+            r = requests.get(url, headers=self._headers(), timeout=10)
+            r.raise_for_status()
+            owner = (r.json() or {}).get("owner")
+        except (requests.RequestException, ValueError) as exc:
+            raise InboxGuardError(f"cannot verify ownership of {self.inbox}: {exc}") from exc
+        if not owner:
+            raise InboxGuardError(
+                f"{self.inbox} is not owned by this account (public inbox)"
+            )
 
     def list_messages(self) -> list[dict]:
         url = f"{self.base_url}/addresses/{self.inbox}/messages"
