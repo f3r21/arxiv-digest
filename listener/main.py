@@ -177,7 +177,17 @@ def _reply_to(sub: Subscriber, msg: dict, backend: InboxBackend, now: datetime) 
         )
         _finish(msg_id, backend)
         return
-    record_reply_sent(msg_id, sub.id, now)
+    try:
+        record_reply_sent(msg_id, sub.id, now)
+    except Exception as exc:
+        # The reply already went out: leaving the message unprocessed would
+        # resend it every poll, and the caps would never see it.
+        logger.error(
+            "ERROR: reply sent to sub=%d for msg %s but logging it failed: %s",
+            sub.id, msg_id, exc,
+        )
+        _finish_best_effort(msg_id, backend)
+        return
     logger.info(
         "RESULT: reply sent to sub=%d with %d papers %s",
         sub.id, len(papers), [p["number"] for p in papers],

@@ -148,3 +148,24 @@ def test_unexpected_error_is_terminal_for_the_message(
     assert smtp.outbox == []
     errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
     assert any(f"sub={sub_id}" in e and "m1" in e for e in errors)
+
+
+def test_bookkeeping_failure_after_send_does_not_resend(
+    inbox, smtp, add_subscriber, monkeypatch, caplog
+):
+    sub_id = add_subscriber("ana@example.com", PAPERS)
+    inbox.add("m1", "ana@example.com", "1")
+
+    def disk_full(*args, **kwargs):
+        raise sqlite3.OperationalError("database or disk is full")
+
+    monkeypatch.setattr(main, "record_reply_sent", disk_full)
+    with caplog.at_level(logging.ERROR, logger="listener"):
+        main.poll_once(inbox)
+        main.poll_once(inbox)
+
+    assert len(smtp.outbox) == 1
+    assert inbox.deleted == ["m1"]
+    assert db.is_processed("m1")
+    errors = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert any(f"sub={sub_id}" in e and "m1" in e for e in errors)
