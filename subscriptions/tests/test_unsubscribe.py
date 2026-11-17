@@ -336,3 +336,30 @@ def test_unsubscribe_purges_rows_in_tables_without_cascade(
     assert r.status_code == 200
     assert _rows_about(sub_id, "alice@example.com") == NONE_PRESENT
 
+
+def test_startup_purges_digest_rows_orphaned_by_a_concurrent_digest_run(
+    digest_created_tables, monkeypatch
+):
+    """digest loads subscribers once, then writes per-subscriber state; if the
+    subscriber is purged in between, those rows land for an id that no
+    longer exists. Startup removes them."""
+    monkeypatch.delenv("RECIPIENT", raising=False)
+    kept = _seed_full_subscriber("kept@example.com")
+    gone = _seed_full_subscriber("gone@example.com")
+    db.purge_subscriber(gone)
+    with _raw() as c:
+        c.execute(
+            "INSERT INTO subscriber_seen_papers (subscriber_id, arxiv_id) VALUES (?, ?)",
+            (gone, "2401.00002"),
+        )
+        c.execute(
+            "INSERT INTO subscriber_last_digest (subscriber_id, issue, papers_json) "
+            "VALUES (?, ?, ?)",
+            (gone, 2, "[]"),
+        )
+
+    with TestClient(main.app):
+        pass
+
+    assert _rows_about(gone, "gone@example.com") == NONE_PRESENT
+    assert _rows_about(kept, "kept@example.com") == ALL_PRESENT

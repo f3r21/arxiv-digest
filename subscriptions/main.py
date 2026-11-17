@@ -62,6 +62,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     purged = db.purge_legacy_unsubscribed()
     if purged:
         logger.info("INIT: purged %d legacy soft-deleted subscribers", purged)
+    orphans = db.purge_orphan_digest_rows()
+    if orphans:
+        logger.info("INIT: purged %d orphan digest rows", orphans)
     cats.load()
     seed_from_env()
     logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)

@@ -216,6 +216,24 @@ def purge_legacy_unsubscribed() -> int:
     return len(ids)
 
 
+def purge_orphan_digest_rows() -> int:
+    """Delete digest state rows whose subscriber no longer exists.
+
+    digest loads subscribers once per run and writes their state afterwards,
+    so a purge that lands mid-run can leave rows for a deleted id when the
+    tables have no foreign keys. Idempotent; run at startup. Returns the
+    number of rows deleted.
+    """
+    deleted = 0
+    with _conn() as c:
+        for table in ("subscriber_seen_papers", "subscriber_last_digest"):
+            deleted += c.execute(
+                f"DELETE FROM {table} "
+                "WHERE subscriber_id NOT IN (SELECT id FROM subscribers)"
+            ).rowcount
+    return deleted
+
+
 def get_subscriber_by_id(subscriber_id: int) -> Subscriber | None:
     with _conn() as c:
         row = c.execute(
