@@ -8,10 +8,18 @@ sender with the arXiv links of those papers. Unknown senders are dropped.
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from db import init_db, is_processed, mark_processed
+from db import (
+    count_replies_sent,
+    init_db,
+    is_processed,
+    mark_processed,
+    record_reply_sent,
+    utc_day,
+)
 from email_sender import send_reply
 from inbox import InboxBackend, create_backend
 from reply_parser import parse_reply
@@ -26,6 +34,11 @@ logging.basicConfig(
 
 POLL_INTERVAL_S = int(os.environ.get("POLL_INTERVAL_S", "30"))
 ALIVE_FILE = Path("/tmp/alive")
+# Daily reply caps, reset at 00:00 UTC. Resend's free plan allows 100 emails/day
+# shared with the digest (one per subscriber) and confirmation emails, so the
+# global cap keeps replies from eating the digest's share.
+REPLY_DAILY_CAP_PER_SUB = int(os.environ.get("REPLY_DAILY_CAP_PER_SUB", "5"))
+REPLY_DAILY_CAP_GLOBAL = int(os.environ.get("REPLY_DAILY_CAP_GLOBAL", "10"))
 
 
 def _select_papers(
@@ -51,7 +64,17 @@ def _finish(msg_id: str, backend: InboxBackend) -> None:
     backend.delete_message(msg_id)
 
 
-def _process_message(msg: dict, backend: InboxBackend) -> None:
+def _cap_reached(subscriber_id: int, now: datetime) -> str | None:
+    """Name of the daily cap that blocks another reply, or None."""
+    day = utc_day(now)
+    if count_replies_sent(day) >= REPLY_DAILY_CAP_GLOBAL:
+        return f"global cap {REPLY_DAILY_CAP_GLOBAL}/day"
+    if count_replies_sent(day, subscriber_id) >= REPLY_DAILY_CAP_PER_SUB:
+        return f"per-subscriber cap {REPLY_DAILY_CAP_PER_SUB}/day"
+    return None
+
+
+def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
     msg_id = msg["id"]
     sender = (msg.get("sender") or "").strip().lower()
     sub = find_by_email(sender) if sender else None
@@ -78,24 +101,35 @@ def _process_message(msg: dict, backend: InboxBackend) -> None:
         "PROFILE: sub=%s id=%d pidio numeros %s", sub.email, sub.id, numbers
     )
     papers = _select_papers(numbers, snapshot)
-    if papers:
-        send_reply(
-            to_addr=sub.email,
-            original_subject=msg.get("subject", ""),
-            papers=papers,
-            manage_url=build_manage_url(sub.id),
-            unsubscribe_url=build_unsubscribe_url(sub.id),
-        )
-    _finish(msg_id, backend)
+    if not papers:
+        _finish(msg_id, backend)
+        return
+    cap = _cap_reached(sub.id, now)
+    if cap:
+        logger.warning("WARN: sub=%d hit the %s; no reply for msg %s", sub.id, cap, msg_id)
+        _finish(msg_id, backend)
+        return
+    send_reply(
+        to_addr=sub.email,
+        original_subject=msg.get("subject", ""),
+        papers=papers,
+        manage_url=build_manage_url(sub.id),
+        unsubscribe_url=build_unsubscribe_url(sub.id),
+    )
+    record_reply_sent(msg_id, sub.id, now)
+    backend.delete_message(msg_id)
 
 
-def poll_once(backend: InboxBackend) -> None:
-    """Process every unprocessed message currently in the inbox."""
+def poll_once(backend: InboxBackend, now: datetime | None = None) -> None:
+    """Process every unprocessed message currently in the inbox.
+
+    `now` (timezone-aware) dates the replies for the daily caps; defaults to the current time.
+    """
     for msg in backend.fetch_messages():
         if is_processed(msg["id"]):
             continue
         try:
-            _process_message(msg, backend)
+            _process_message(msg, backend, now or datetime.now(timezone.utc))
         except Exception as exc:
             logger.error("ERROR: procesando msg %s: %s", msg.get("id"), exc)
 
