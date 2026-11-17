@@ -2,6 +2,7 @@
 
 import logging
 import smtplib
+import sqlite3
 
 import pytest
 
@@ -36,3 +37,76 @@ def test_smtp_failure_is_terminal_for_the_message(
     inbox.add("m1", "ana@example.com", "1")  # a backend that failed to delete it
     main.poll_once(inbox)
     assert smtp.outbox == []
+
+
+@pytest.fixture
+def lock_subscribers_db(subscribers_db, monkeypatch):
+    """Callable that takes an exclusive lock on subscribers.db and returns its release function."""
+    import subscriber_repo
+
+    monkeypatch.setattr(subscriber_repo, "BUSY_TIMEOUT_S", 0.05)
+    holders: list[sqlite3.Connection] = []
+
+    def _lock():
+        holder = sqlite3.connect(subscribers_db, isolation_level=None)
+        holder.execute("BEGIN EXCLUSIVE")
+        holders.append(holder)
+        return holder.close
+
+    yield _lock
+    for holder in holders:
+        holder.close()
+
+
+def test_locked_subscribers_db_leaves_message_for_next_poll(
+    inbox, smtp, add_subscriber, lock_subscribers_db, caplog
+):
+    add_subscriber("ana@example.com", PAPERS)
+    inbox.add("m1", "ana@example.com", "1")
+    release = lock_subscribers_db()
+
+    with caplog.at_level(logging.ERROR, logger="listener"):
+        main.poll_once(inbox)
+
+    assert not db.is_processed("m1")
+    assert inbox.deleted == []
+    assert smtp.outbox == []
+    assert any(r.levelno == logging.ERROR for r in caplog.records)
+
+    release()
+    main.poll_once(inbox)
+    assert len(smtp.outbox) == 1
+    assert db.is_processed("m1")
+
+
+def test_missing_subscribers_table_counts_as_unknown_sender(
+    inbox, smtp, tmp_path, monkeypatch
+):
+    import subscriber_repo
+
+    monkeypatch.setattr(subscriber_repo, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(subscriber_repo, "DB_PATH", tmp_path / "empty.db")
+    inbox.add("m1", "ana@example.com", "1")
+
+    main.poll_once(inbox)
+
+    assert db.is_processed("m1")
+    assert smtp.outbox == []
+
+
+def test_snapshot_lookup_raises_on_locked_db(add_subscriber, lock_subscribers_db):
+    import subscriber_repo
+
+    sub_id = add_subscriber("ana@example.com", PAPERS)
+    lock_subscribers_db()
+    with pytest.raises(sqlite3.OperationalError):
+        subscriber_repo.get_last_digest_for(sub_id)
+
+
+def test_snapshot_lookup_is_empty_when_table_is_missing(tmp_path, monkeypatch):
+    import subscriber_repo
+
+    monkeypatch.setattr(subscriber_repo, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(subscriber_repo, "DB_PATH", tmp_path / "empty.db")
+
+    assert subscriber_repo.get_last_digest_for(1) == []
