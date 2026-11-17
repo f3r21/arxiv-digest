@@ -40,7 +40,18 @@ COMPOSE 'exec digest python -c "from main import run_digest; run_digest()"'
 
 # Inspeccionar DB
 COMPOSE 'exec subscriptions python -c "import sqlite3; c = sqlite3.connect(\"/app/data/subscribers.db\"); [print(r) for r in c.execute(\"SELECT id,email,confirmed_at,unsubscribed_at FROM subscribers\")]"'
+
+# Dar de baja a mano: borrado real del suscriptor y de todo lo suyo
+# (pending_confirmations, subscribe_attempts, subscriber_seen_papers,
+# subscriber_last_digest). Es lo mismo que hace /unsubscribe.
+COMPOSE 'exec subscriptions python -c "import db; print(db.purge_subscriber(<ID>))"'
 ```
+
+La baja es un borrado real, no un soft delete. No marques `unsubscribed_at`
+a mano: digest y listener dejan de usar esa fila, pero subscriptions la sigue
+tratando como activa (`/admin/subscribers`, `/manage`) hasta el siguiente
+restart de subscriptions, que la borra junto con todos sus datos. La columna
+solo queda por compatibilidad con los filtros de digest y listener.
 
 ---
 
@@ -168,7 +179,9 @@ Mitigacion: restart Caddy, dispara nuevo ACME challenge.
 ### 7. "Suscriptor no recibe digest aunque este confirmado"
 
 Posibles causas:
-- `unsubscribed_at` no es NULL → no se le envia. Reactivar manual.
+- Ya no esta en `subscribers`: la baja borra la fila; tiene que suscribirse de nuevo.
+- `unsubscribed_at` no es NULL (marcado a mano) → digest no le envia, y el
+  siguiente restart de subscriptions lo borra. Limpiar la columna si fue un error.
 - Sus categorias no tienen papers nuevos hoy (filter devuelve []).
 - Marcado como "seen" todos los papers (subscriber_seen_papers). Para retest:
   ```bash
