@@ -60,7 +60,8 @@ class FakeSMTP:
 
     def send_message(self, msg):
         if msg["To"] in FakeSMTP.failing_recipients:
-            raise OSError("SMTP connection refused")
+            # Real SMTP errors (e.g. SMTPRecipientsRefused) quote the address.
+            raise OSError(f"550 recipient refused: {msg['To']}")
         FakeSMTP.sent.append(msg)
 
 
@@ -204,6 +205,21 @@ def test_list_unsubscribe_is_https_one_click_without_mailto(env):
     assert header.endswith(">")
     assert header.count("<") == 1
     assert msg["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
+def test_logs_identify_subscribers_by_id_not_email(env, caplog):
+    ok_id = add_subscriber(env, "ok@example.com")
+    bad_id = add_subscriber(env, "bad@example.com")
+    add_subscriber(env, "math@example.com", categories=("math.AG",))
+    FakeSMTP.failing_recipients = {"bad@example.com"}
+
+    with caplog.at_level("INFO", logger="digest"):
+        main.run_digest()
+
+    text = caplog.text
+    assert "@example.com" not in text
+    assert f"id={ok_id}" in text
+    assert f"id={bad_id}" in text
 
 
 def test_empty_arxiv_pings_fail_and_sends_nothing(env):

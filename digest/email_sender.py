@@ -106,6 +106,6 @@ def send_digest_to(
             s.login(SMTP_USER, SMTP_PASS)
         s.send_message(msg)
     logger.info(
-        "RESULT: email enviado a %s con %d papers (No. %d)",
-        subscriber.email, len(papers), issue,
+        "RESULT: email sent to sub id=%d with %d papers (No. %d)",
+        subscriber.id, len(papers), issue,
     )

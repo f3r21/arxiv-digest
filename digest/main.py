@@ -32,7 +32,8 @@ from translator_client import translate_papers
 logger = logging.getLogger("digest")
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s INIT: %(message)s",
+    # Each message carries its own tag (INIT:, RESULT:, ...); no fixed prefix.
+    format="%(asctime)s %(name)s %(message)s",
 )
 
 DIGEST_HOUR = os.environ.get("DIGEST_HOUR", "07:00")
@@ -224,7 +225,7 @@ def run_digest() -> None:
             picked = _papers_for_subscriber(sub, raw)
             if not picked:
                 logger.info(
-                    "PROFILE: sub=%s 0 papers nuevos tras filtro", sub.email
+                    "PROFILE: sub id=%d has 0 new papers after filtering", sub.id
                 )
                 continue
             if translator_url:
@@ -246,8 +247,11 @@ def run_digest() -> None:
                 _write_public_preview(issue, picked)
         except Exception as exc:
             failed_count += 1
+            # SMTP errors often quote the recipient; keep the address out of logs.
+            reason = str(exc).replace(sub.email, f"<sub id={sub.id}>")
             logger.error(
-                "ERROR: sub=%s id=%d fallo: %s", sub.email, sub.id, exc
+                "ERROR: sub id=%d failed: %s: %s",
+                sub.id, type(exc).__name__, reason,
             )
 
     finalize_issue(issue, sent_count, total_sent)
