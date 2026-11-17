@@ -11,6 +11,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -103,20 +104,14 @@ def get_unseen_for(subscriber_id: int, arxiv_ids: list[str]) -> set[str]:
     return {aid for aid in arxiv_ids if aid not in seen}
 
 
-def mark_seen_for(subscriber_id: int, arxiv_ids: list[str]) -> None:
-    if not arxiv_ids:
-        return
-    with _conn() as c:
-        c.executemany(
-            "INSERT OR IGNORE INTO subscriber_seen_papers "
-            "(subscriber_id, arxiv_id) VALUES (?, ?)",
-            [(subscriber_id, aid) for aid in arxiv_ids],
-        )
-
-
-def save_last_digest_for(
+def record_delivery(
     subscriber_id: int, issue: int, papers: list[dict[str, Any]]
 ) -> None:
+    """Persist a sent digest: reply snapshot plus seen marks, atomically.
+
+    Call only after the email was accepted by SMTP. Both writes share one
+    connection and one commit, so either both land or neither does.
+    """
     payload = json.dumps(papers, ensure_ascii=False)
     with _conn() as c:
         c.execute(
@@ -131,6 +126,44 @@ def save_last_digest_for(
             """,
             (subscriber_id, issue, payload),
         )
+        c.executemany(
+            "INSERT OR IGNORE INTO subscriber_seen_papers "
+            "(subscriber_id, arxiv_id) VALUES (?, ?)",
+            [(subscriber_id, p["arxiv_id"]) for p in papers],
+        )
+
+
+def prune_seen_older_than(days: int) -> int:
+    """Delete seen marks older than `days`; return how many rows went.
+
+    Pruning is not safe on its own: the arXiv query has no date bound and
+    can return old papers again. It is safe only because run_digest drops
+    papers published more than SEEN_RETENTION_DAYS ago before filtering
+    (main._within_seen_retention), and a seen mark is never older than its
+    paper's publication. Pass the same `days` as that cut.
+    """
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM subscriber_seen_papers "
+            "WHERE seen_at < datetime('now', ?)",
+            (f"-{int(days)} days",),
+        )
+        return int(cur.rowcount)
+
+
+def issue_started_since(since_utc: datetime) -> bool:
+    """True if a digest issue was reserved at or after `since_utc`.
+
+    digest_issues.sent_at is SQLite CURRENT_TIMESTAMP: UTC text in
+    'YYYY-MM-DD HH:MM:SS', which compares correctly as a string.
+    """
+    threshold = since_utc.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as c:
+        row = c.execute(
+            "SELECT 1 FROM digest_issues WHERE sent_at >= ? LIMIT 1",
+            (threshold,),
+        ).fetchone()
+    return row is not None
 
 
 def next_issue_number() -> int:

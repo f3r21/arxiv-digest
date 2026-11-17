@@ -9,7 +9,8 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import schedule
@@ -22,17 +23,19 @@ from subscriber_repo import (
     finalize_issue,
     get_unseen_for,
     init_state_tables,
+    issue_started_since,
     list_active_subscribers,
-    mark_seen_for,
     next_issue_number,
-    save_last_digest_for,
+    prune_seen_older_than,
+    record_delivery,
 )
 from translator_client import translate_papers
 
 logger = logging.getLogger("digest")
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s INIT: %(message)s",
+    # Each message carries its own tag (INIT:, RESULT:, ...); no fixed prefix.
+    format="%(asctime)s %(name)s %(message)s",
 )
 
 DIGEST_HOUR = os.environ.get("DIGEST_HOUR", "07:00")
@@ -42,25 +45,30 @@ PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
 ARCHIVE_DIR = Path("/app/data/archive")
 SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "").strip()
+# Seen marks older than this are pruned, and papers published before this
+# window are never sent, so a pruned mark cannot cause a re-send.
+SEEN_RETENTION_DAYS = 30
 
 
-def _ping_healthcheck(status: str = "ok") -> None:
-    """POST a healthchecks.io para reportar success/fail/start.
+def _ping_healthcheck(status: str = "ok", body: str | None = None) -> None:
+    """Report start/ok/fail to healthchecks.io.
 
-    status: 'ok' (POST a HEALTHCHECK_URL), 'fail' (POST a /fail), 'start' (/start).
-    Silent fail si HEALTHCHECK_URL no configurado o el ping falla (no debe
-    interrumpir el digest si el monitoring esta caido).
+    status: 'ok' (HEALTHCHECK_URL), 'fail' (/fail), 'start' (/start).
+    body: optional text sent as a POST body; healthchecks.io shows it in the
+    event log, so it carries the run's counts.
+    Never raises: a monitoring outage must not interrupt the digest.
     """
     if not HEALTHCHECK_URL:
         return
     suffix = "" if status == "ok" else f"/{status}"
+    data = body.encode("utf-8") if body is not None else None
     try:
-        import urllib.request
         urllib.request.urlopen(
-            HEALTHCHECK_URL + suffix, timeout=10,
+            urllib.request.Request(HEALTHCHECK_URL + suffix, data=data),
+            timeout=10,
         )
     except Exception as exc:
-        logger.warning("WARN: healthcheck ping (%s) fallo: %s", status, exc)
+        logger.warning("WARN: healthcheck ping (%s) failed: %s", status, exc)
 
 
 def _write_archive(papers: list[dict], issue: int) -> None:
@@ -167,6 +175,31 @@ def _write_public_preview(issue: int, papers: list[dict]) -> None:
         logger.error("ERROR: no se pudo escribir public preview: %s", exc)
 
 
+def _within_seen_retention(papers: list[dict]) -> list[dict]:
+    """Drop papers published before the seen-marks retention window.
+
+    The arXiv query has no date bound, so a low-traffic union of categories
+    can return months-old papers. Their seen marks are pruned after
+    SEEN_RETENTION_DAYS, so without this cut they would be sent again.
+    Papers with an unparseable `published` are kept.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=SEEN_RETENTION_DAYS)
+    kept = []
+    for p in papers:
+        try:
+            published = datetime.fromisoformat(
+                str(p.get("published", "")).replace("Z", "+00:00")
+            )
+        except ValueError:
+            kept.append(p)
+            continue
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        if published >= cutoff:
+            kept.append(p)
+    return kept
+
+
 def _papers_for_subscriber(
     sub: Subscriber, raw: list[dict]
 ) -> list[dict]:
@@ -212,21 +245,24 @@ def run_digest() -> None:
     # Escribir archive publico para SEO ANTES del loop de suscriptores.
     # El archive es global (todos los papers del fetch, no filtrados por user).
     _write_archive(raw, issue)
+    candidates = _within_seen_retention(raw)
     translator_url = os.environ.get("TRANSLATOR_URL", "").strip()
     total_sent = 0
     sent_count = 0
+    failed_count = 0
 
     for sub in subs:
         try:
-            picked = _papers_for_subscriber(sub, raw)
+            picked = _papers_for_subscriber(sub, candidates)
             if not picked:
                 logger.info(
-                    "PROFILE: sub=%s 0 papers nuevos tras filtro", sub.email
+                    "PROFILE: sub id=%d has 0 new papers after filtering", sub.id
                 )
                 continue
             if translator_url:
                 picked = translate_papers(picked, translator_url)
-            save_last_digest_for(sub.id, issue, picked)
+            # Send first; persist only what the subscriber actually received,
+            # so a reply never maps onto a digest that never arrived.
             send_digest_to(
                 SubscriberView(
                     id=sub.id, email=sub.email, categories=sub.categories
@@ -234,15 +270,19 @@ def run_digest() -> None:
                 picked,
                 issue,
             )
-            mark_seen_for(sub.id, [p["arxiv_id"] for p in picked])
+            record_delivery(sub.id, issue, picked)
             total_sent += len(picked)
             sent_count += 1
             # snapshot publico para /preview: si es el seed, lo usamos
             if sub.id == SEED_SUBSCRIBER_ID:
                 _write_public_preview(issue, picked)
         except Exception as exc:
+            failed_count += 1
+            # SMTP errors often quote the recipient; keep the address out of logs.
+            reason = str(exc).replace(sub.email, f"<sub id={sub.id}>")
             logger.error(
-                "ERROR: sub=%s id=%d fallo: %s", sub.email, sub.id, exc
+                "ERROR: sub id=%d failed: %s: %s",
+                sub.id, type(exc).__name__, reason,
             )
 
     finalize_issue(issue, sent_count, total_sent)
@@ -250,7 +290,48 @@ def run_digest() -> None:
         "RESULT: issue %d cerrado; %d suscriptores recibieron %d papers en total",
         issue, sent_count, total_sent,
     )
-    _ping_healthcheck("ok")
+    try:
+        pruned = prune_seen_older_than(SEEN_RETENTION_DAYS)
+        logger.info(
+            "RESULT: pruned %d seen marks older than %d days",
+            pruned, SEEN_RETENTION_DAYS,
+        )
+    except Exception as exc:
+        logger.error("ERROR: seen marks prune failed: %s", exc)
+    summary = (
+        f"issue={issue} sent={sent_count} failed={failed_count} "
+        f"papers={total_sent}"
+    )
+    if failed_count:
+        logger.error("ERROR: digest run had failed sends: %s", summary)
+        _ping_healthcheck("fail", body=summary)
+    else:
+        _ping_healthcheck("ok", body=summary)
+
+
+def catch_up_if_missed(now: datetime | None = None) -> bool:
+    """Run today's digest if its scheduled time has passed and it has not run.
+
+    `schedule` keeps no state, so a container (re)started after DIGEST_HOUR
+    would otherwise skip the day. "Has run" means an issue was reserved at
+    or after today's DIGEST_HOUR in local time (TZ env). Returns True if it
+    ran the digest.
+    """
+    now = now or datetime.now()
+    if now.tzinfo is None:
+        now = now.astimezone()  # naive means local time (TZ env)
+    hour, minute = (int(x) for x in DIGEST_HOUR.split(":")[:2])
+    scheduled = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if now < scheduled:
+        return False
+    if issue_started_since(scheduled):
+        return False
+    logger.info(
+        "INIT: started after %s and no digest since; running catch-up",
+        DIGEST_HOUR,
+    )
+    run_digest()
+    return True
 
 
 def main() -> None:
@@ -262,6 +343,13 @@ def main() -> None:
             run_digest()
         except Exception as exc:
             logger.error("ERROR: RUN_NOW digest fallo: %s", exc)
+    else:
+        # RUN_NOW already covers this startup; a catch-up on top would hit
+        # arXiv twice (an empty run leaves no issue row to detect it).
+        try:
+            catch_up_if_missed()
+        except Exception as exc:
+            logger.error("ERROR: catch-up digest failed: %s", exc)
     schedule.every().day.at(DIGEST_HOUR).do(run_digest)
     logger.info("INIT: scheduler arrancado, proximo digest a las %s", DIGEST_HOUR)
     while True:
