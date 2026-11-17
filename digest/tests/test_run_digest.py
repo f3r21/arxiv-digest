@@ -161,3 +161,46 @@ def test_smtp_failure_writes_neither_snapshot_nor_seen(env):
     # The healthy subscriber is unaffected by the other one's failure.
     assert snapshot_for(env, ok_id) is not None
     assert seen_ids(ok_id) == {"2611.00001", "2611.00002"}
+
+
+def test_any_failed_send_pings_fail_with_counts(env):
+    add_subscriber(env, "ok@example.com")
+    add_subscriber(env, "bad@example.com")
+    FakeSMTP.failing_recipients = {"bad@example.com"}
+
+    main.run_digest()
+
+    urls = [u for u, _ in env["pings"]]
+    assert urls == [
+        "https://hc.example/ping/abc/start",
+        "https://hc.example/ping/abc/fail",
+    ]
+    body = env["pings"][-1][1].decode()
+    assert "sent=1" in body
+    assert "failed=1" in body
+
+
+def test_all_sends_ok_pings_ok(env):
+    add_subscriber(env, "ok@example.com")
+
+    main.run_digest()
+
+    urls = [u for u, _ in env["pings"]]
+    assert urls == [
+        "https://hc.example/ping/abc/start",
+        "https://hc.example/ping/abc",
+    ]
+
+
+def test_empty_arxiv_pings_fail_and_sends_nothing(env):
+    add_subscriber(env, "ok@example.com")
+    env["fetched"]["papers"] = []
+
+    main.run_digest()
+
+    assert FakeSMTP.sent == []
+    urls = [u for u, _ in env["pings"]]
+    assert urls == [
+        "https://hc.example/ping/abc/start",
+        "https://hc.example/ping/abc/fail",
+    ]

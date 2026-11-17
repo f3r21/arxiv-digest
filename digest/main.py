@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import time
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,23 +44,25 @@ SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscr
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "").strip()
 
 
-def _ping_healthcheck(status: str = "ok") -> None:
-    """POST a healthchecks.io para reportar success/fail/start.
+def _ping_healthcheck(status: str = "ok", body: str | None = None) -> None:
+    """Report start/ok/fail to healthchecks.io.
 
-    status: 'ok' (POST a HEALTHCHECK_URL), 'fail' (POST a /fail), 'start' (/start).
-    Silent fail si HEALTHCHECK_URL no configurado o el ping falla (no debe
-    interrumpir el digest si el monitoring esta caido).
+    status: 'ok' (HEALTHCHECK_URL), 'fail' (/fail), 'start' (/start).
+    body: optional text sent as a POST body; healthchecks.io shows it in the
+    event log, so it carries the run's counts.
+    Never raises: a monitoring outage must not interrupt the digest.
     """
     if not HEALTHCHECK_URL:
         return
     suffix = "" if status == "ok" else f"/{status}"
+    data = body.encode("utf-8") if body is not None else None
     try:
-        import urllib.request
         urllib.request.urlopen(
-            HEALTHCHECK_URL + suffix, timeout=10,
+            urllib.request.Request(HEALTHCHECK_URL + suffix, data=data),
+            timeout=10,
         )
     except Exception as exc:
-        logger.warning("WARN: healthcheck ping (%s) fallo: %s", status, exc)
+        logger.warning("WARN: healthcheck ping (%s) failed: %s", status, exc)
 
 
 def _write_archive(papers: list[dict], issue: int) -> None:
@@ -214,6 +217,7 @@ def run_digest() -> None:
     translator_url = os.environ.get("TRANSLATOR_URL", "").strip()
     total_sent = 0
     sent_count = 0
+    failed_count = 0
 
     for sub in subs:
         try:
@@ -241,6 +245,7 @@ def run_digest() -> None:
             if sub.id == SEED_SUBSCRIBER_ID:
                 _write_public_preview(issue, picked)
         except Exception as exc:
+            failed_count += 1
             logger.error(
                 "ERROR: sub=%s id=%d fallo: %s", sub.email, sub.id, exc
             )
@@ -250,7 +255,15 @@ def run_digest() -> None:
         "RESULT: issue %d cerrado; %d suscriptores recibieron %d papers en total",
         issue, sent_count, total_sent,
     )
-    _ping_healthcheck("ok")
+    summary = (
+        f"issue={issue} sent={sent_count} failed={failed_count} "
+        f"papers={total_sent}"
+    )
+    if failed_count:
+        logger.error("ERROR: digest run had failed sends: %s", summary)
+        _ping_healthcheck("fail", body=summary)
+    else:
+        _ping_healthcheck("ok", body=summary)
 
 
 def main() -> None:
