@@ -229,6 +229,23 @@ def test_resubscribe_after_purge_is_a_fresh_signup(client, monkeypatch):
     assert db.list_active() == [fresh]
 
 
+def test_landing_does_not_promise_unsubscribe_by_reply(client):
+    """No handler acts on STOP/DELETE replies; the page must not offer it."""
+    text = client.get("/").text
+
+    assert "STOP" not in text
+    assert "DELETE" not in text
+
+
+def test_goodbye_page_states_immediate_deletion_not_a_24h_purge(client):
+    sub_id = _seed_full_subscriber("alice@example.com")
+
+    text = client.post(f"/unsubscribe?token={tokens.make_unsubscribe_token(sub_id)}").text
+
+    assert "24&nbsp;hours" not in text
+    assert "deleted" in text
+
+
 def _mark_legacy_soft_deleted(sub_id: int) -> None:
     """What the old unsubscribe did: set unsubscribed_at and keep everything."""
     with _raw() as c:
