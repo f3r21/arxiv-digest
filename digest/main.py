@@ -23,9 +23,8 @@ from subscriber_repo import (
     get_unseen_for,
     init_state_tables,
     list_active_subscribers,
-    mark_seen_for,
     next_issue_number,
-    save_last_digest_for,
+    record_delivery,
 )
 from translator_client import translate_papers
 
@@ -226,7 +225,8 @@ def run_digest() -> None:
                 continue
             if translator_url:
                 picked = translate_papers(picked, translator_url)
-            save_last_digest_for(sub.id, issue, picked)
+            # Send first; persist only what the subscriber actually received,
+            # so a reply never maps onto a digest that never arrived.
             send_digest_to(
                 SubscriberView(
                     id=sub.id, email=sub.email, categories=sub.categories
@@ -234,7 +234,7 @@ def run_digest() -> None:
                 picked,
                 issue,
             )
-            mark_seen_for(sub.id, [p["arxiv_id"] for p in picked])
+            record_delivery(sub.id, issue, picked)
             total_sent += len(picked)
             sent_count += 1
             # snapshot publico para /preview: si es el seed, lo usamos

@@ -103,20 +103,14 @@ def get_unseen_for(subscriber_id: int, arxiv_ids: list[str]) -> set[str]:
     return {aid for aid in arxiv_ids if aid not in seen}
 
 
-def mark_seen_for(subscriber_id: int, arxiv_ids: list[str]) -> None:
-    if not arxiv_ids:
-        return
-    with _conn() as c:
-        c.executemany(
-            "INSERT OR IGNORE INTO subscriber_seen_papers "
-            "(subscriber_id, arxiv_id) VALUES (?, ?)",
-            [(subscriber_id, aid) for aid in arxiv_ids],
-        )
-
-
-def save_last_digest_for(
+def record_delivery(
     subscriber_id: int, issue: int, papers: list[dict[str, Any]]
 ) -> None:
+    """Persist a sent digest: reply snapshot plus seen marks, atomically.
+
+    Call only after the email was accepted by SMTP. Both writes share one
+    connection and one commit, so either both land or neither does.
+    """
     payload = json.dumps(papers, ensure_ascii=False)
     with _conn() as c:
         c.execute(
@@ -130,6 +124,11 @@ def save_last_digest_for(
                 sent_at     = CURRENT_TIMESTAMP
             """,
             (subscriber_id, issue, payload),
+        )
+        c.executemany(
+            "INSERT OR IGNORE INTO subscriber_seen_papers "
+            "(subscriber_id, arxiv_id) VALUES (?, ?)",
+            [(subscriber_id, p["arxiv_id"]) for p in papers],
         )
 
 
