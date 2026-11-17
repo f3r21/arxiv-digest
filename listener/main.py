@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+import requests
+
 from db import (
     count_replies_sent,
     init_db,
@@ -41,6 +43,8 @@ ALIVE_FILE = Path("/tmp/alive")
 # global cap keeps replies from eating the digest's share.
 REPLY_DAILY_CAP_PER_SUB = int(os.environ.get("REPLY_DAILY_CAP_PER_SUB", "5"))
 REPLY_DAILY_CAP_GLOBAL = int(os.environ.get("REPLY_DAILY_CAP_GLOBAL", "10"))
+# Optional healthchecks.io ping URL, hit after each poll that handled every message.
+HEALTHCHECK_URL_LISTENER = os.environ.get("HEALTHCHECK_URL_LISTENER", "").strip()
 
 
 def _select_papers(
@@ -132,20 +136,44 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
     backend.delete_message(msg_id)
 
 
-def poll_once(backend: InboxBackend, now: datetime | None = None) -> None:
+def poll_once(backend: InboxBackend, now: datetime | None = None) -> int:
     """Process every unprocessed message currently in the inbox.
 
     A listing error propagates. An error on one message (body fetch, locked DB)
     is logged and leaves that message unprocessed for the next poll.
     `now` (timezone-aware) dates the replies for the daily caps; defaults to the current time.
+    Returns the number of messages left for retry.
     """
+    failed = 0
     for msg in backend.list_messages():
         if is_processed(msg["id"]):
             continue
         try:
             _process_message(msg, backend, now or datetime.now(timezone.utc))
         except Exception as exc:
+            failed += 1
             logger.error("ERROR: procesando msg %s: %s", msg.get("id"), exc)
+    return failed
+
+
+def _ping_heartbeat() -> None:
+    """GET the healthchecks.io URL, if configured. Never raises."""
+    if not HEALTHCHECK_URL_LISTENER:
+        return
+    try:
+        requests.get(HEALTHCHECK_URL_LISTENER, timeout=10)
+    except requests.RequestException as exc:
+        logger.warning("WARN: heartbeat ping failed: %s", exc)
+
+
+def run_cycle(backend: InboxBackend) -> None:
+    """One loop iteration: poll, heartbeat only if every message was handled, touch /tmp/alive."""
+    try:
+        if poll_once(backend) == 0:
+            _ping_heartbeat()
+    except Exception as exc:
+        logger.error("ERROR: poll failed: %s", exc)
+    ALIVE_FILE.touch(exist_ok=True)
 
 
 def startup_guard(
@@ -174,11 +202,7 @@ def main() -> None:
         backend.__class__.__name__, POLL_INTERVAL_S,
     )
     while True:
-        try:
-            poll_once(backend)
-        except Exception as exc:
-            logger.error("ERROR: loop: %s", exc)
-        ALIVE_FILE.touch(exist_ok=True)
+        run_cycle(backend)
         time.sleep(POLL_INTERVAL_S)
 
 
