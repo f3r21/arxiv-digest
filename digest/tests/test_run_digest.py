@@ -8,12 +8,20 @@ an empty TRANSLATOR_URL). The SQLite DB is a real temp file.
 import json
 import sqlite3
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 import email_sender
 import main
 import subscriber_repo
+
+
+def arxiv_timestamp(days_ago: float) -> str:
+    """`published` in the format the arXiv Atom feed uses."""
+    t = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 PAPERS = [
     {
@@ -22,7 +30,7 @@ PAPERS = [
         "abstract": "We study consensus.",
         "authors": ["A. Author"],
         "categories": ["cs.DC"],
-        "published": "2026-11-17",
+        "published": arxiv_timestamp(1),
         "pdf_url": "https://arxiv.org/pdf/2611.00001",
     },
     {
@@ -31,7 +39,7 @@ PAPERS = [
         "abstract": "We schedule pods.",
         "authors": ["B. Author"],
         "categories": ["cs.DC"],
-        "published": "2026-11-17",
+        "published": arxiv_timestamp(1),
         "pdf_url": "https://arxiv.org/pdf/2611.00002",
     },
 ]
@@ -220,6 +228,36 @@ def test_logs_identify_subscribers_by_id_not_email(env, caplog):
     assert "@example.com" not in text
     assert f"id={ok_id}" in text
     assert f"id={bad_id}" in text
+
+
+def test_run_prunes_seen_marks_older_than_30_days(env):
+    sub_id = add_subscriber(env, "ok@example.com", categories=("math.AG",))
+    with sqlite3.connect(env["tmp"] / "subscribers.db") as c:
+        c.executemany(
+            "INSERT INTO subscriber_seen_papers (subscriber_id, arxiv_id, seen_at) "
+            "VALUES (?, ?, datetime('now', ?))",
+            [
+                (sub_id, "2611.00001", "-31 days"),
+                (sub_id, "2611.00002", "-29 days"),
+            ],
+        )
+
+    main.run_digest()
+
+    assert seen_ids(sub_id) == {"2611.00002"}
+
+
+def test_papers_older_than_seen_retention_are_never_sent(env):
+    # A low-traffic category can return months-old papers in the fetch
+    # window; once their seen mark is pruned they must not be re-sent.
+    sub_id = add_subscriber(env, "ok@example.com")
+    old = dict(PAPERS[0], published=arxiv_timestamp(31))
+    env["fetched"]["papers"] = [old, PAPERS[1]]
+
+    main.run_digest()
+
+    _, ids = snapshot_for(env, sub_id)
+    assert ids == ["2611.00002"]
 
 
 def test_empty_arxiv_pings_fail_and_sends_nothing(env):

@@ -132,6 +132,21 @@ def record_delivery(
         )
 
 
+def prune_seen_older_than(days: int) -> int:
+    """Delete seen marks older than `days`; return how many rows went.
+
+    The daily arXiv query only returns recent announcements, so a paper
+    seen that long ago cannot come back and its mark is dead weight.
+    """
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM subscriber_seen_papers "
+            "WHERE seen_at < datetime('now', ?)",
+            (f"-{int(days)} days",),
+        )
+        return int(cur.rowcount)
+
+
 def next_issue_number() -> int:
     """Reserva el siguiente numero de issue, lo devuelve."""
     with _conn() as c:

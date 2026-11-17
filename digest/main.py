@@ -10,7 +10,7 @@ import logging
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import schedule
@@ -25,6 +25,7 @@ from subscriber_repo import (
     init_state_tables,
     list_active_subscribers,
     next_issue_number,
+    prune_seen_older_than,
     record_delivery,
 )
 from translator_client import translate_papers
@@ -43,6 +44,8 @@ PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
 ARCHIVE_DIR = Path("/app/data/archive")
 SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "").strip()
+# A paper older than this cannot reappear in a daily announcement query.
+SEEN_RETENTION_DAYS = 30
 
 
 def _ping_healthcheck(status: str = "ok", body: str | None = None) -> None:
@@ -170,6 +173,31 @@ def _write_public_preview(issue: int, papers: list[dict]) -> None:
         logger.error("ERROR: no se pudo escribir public preview: %s", exc)
 
 
+def _within_seen_retention(papers: list[dict]) -> list[dict]:
+    """Drop papers published before the seen-marks retention window.
+
+    The arXiv query has no date bound, so a low-traffic union of categories
+    can return months-old papers. Their seen marks are pruned after
+    SEEN_RETENTION_DAYS, so without this cut they would be sent again.
+    Papers with an unparseable `published` are kept.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=SEEN_RETENTION_DAYS)
+    kept = []
+    for p in papers:
+        try:
+            published = datetime.fromisoformat(
+                str(p.get("published", "")).replace("Z", "+00:00")
+            )
+        except ValueError:
+            kept.append(p)
+            continue
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        if published >= cutoff:
+            kept.append(p)
+    return kept
+
+
 def _papers_for_subscriber(
     sub: Subscriber, raw: list[dict]
 ) -> list[dict]:
@@ -215,6 +243,7 @@ def run_digest() -> None:
     # Escribir archive publico para SEO ANTES del loop de suscriptores.
     # El archive es global (todos los papers del fetch, no filtrados por user).
     _write_archive(raw, issue)
+    candidates = _within_seen_retention(raw)
     translator_url = os.environ.get("TRANSLATOR_URL", "").strip()
     total_sent = 0
     sent_count = 0
@@ -222,7 +251,7 @@ def run_digest() -> None:
 
     for sub in subs:
         try:
-            picked = _papers_for_subscriber(sub, raw)
+            picked = _papers_for_subscriber(sub, candidates)
             if not picked:
                 logger.info(
                     "PROFILE: sub id=%d has 0 new papers after filtering", sub.id
@@ -259,6 +288,14 @@ def run_digest() -> None:
         "RESULT: issue %d cerrado; %d suscriptores recibieron %d papers en total",
         issue, sent_count, total_sent,
     )
+    try:
+        pruned = prune_seen_older_than(SEEN_RETENTION_DAYS)
+        logger.info(
+            "RESULT: pruned %d seen marks older than %d days",
+            pruned, SEEN_RETENTION_DAYS,
+        )
+    except Exception as exc:
+        logger.error("ERROR: seen marks prune failed: %s", exc)
     summary = (
         f"issue={issue} sent={sent_count} failed={failed_count} "
         f"papers={total_sent}"
