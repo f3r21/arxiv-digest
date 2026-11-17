@@ -58,6 +58,8 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup: init DB, catalog, seed; shutdown: nada que cerrar."""
     db.init_db()
+    pruned = db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
+    logger.info("INIT: pruned %d expired pending confirmations", pruned)
     cats.load()
     seed_from_env()
     logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)
@@ -340,6 +342,7 @@ async def subscribe(
         "max_papers": max_p,
     }
     token = tokens.make_confirm_token(email_norm)
+    db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
     db.store_pending(tokens.hash_token(token), email_norm, payload)
 
     try:

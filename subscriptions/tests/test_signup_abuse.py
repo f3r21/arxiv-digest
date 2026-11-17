@@ -1,6 +1,7 @@
 """Signup abuse protection: send budget, "not me" link, privacy, retention."""
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -84,3 +85,15 @@ def test_init_db_purges_ips_from_a_legacy_database(isolated_db):
     assert not any("203.0.113.9" in v for v in _all_stored_text(path))
     # The pending confirmation itself survives the migration.
     assert db.pop_pending("h1")["email"] == "old@example.com"
+
+
+def test_pending_confirmations_expire_after_ttl():
+    db.store_pending("fresh", "a@example.com", {"categories": ["cs.DC"]})
+    db.store_pending("stale", "b@example.com", {"categories": ["cs.DC"]})
+    now = datetime.now(timezone.utc)
+
+    db.prune_expired_pending(ttl_hours=48, now=now + timedelta(hours=47))
+    assert db.pop_pending("fresh") is not None
+
+    db.prune_expired_pending(ttl_hours=48, now=now + timedelta(hours=49))
+    assert db.pop_pending("stale") is None

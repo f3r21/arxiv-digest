@@ -4,7 +4,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -226,6 +226,27 @@ def store_pending(token_hash: str, email: str, payload: dict) -> None:
             """,
             (token_hash, email_norm, json.dumps(payload)),
         )
+
+
+def _sql_utc(moment: datetime) -> str:
+    """UTC timestamp in SQLite's CURRENT_TIMESTAMP format."""
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def prune_expired_pending(ttl_hours: int, now: datetime | None = None) -> int:
+    """Delete pending confirmations older than the token TTL.
+
+    Their tokens no longer verify, so the rows only retain an email.
+    Returns the number of rows deleted.
+    """
+    now = now or datetime.now(timezone.utc)
+    cutoff = _sql_utc(now - timedelta(hours=ttl_hours))
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM pending_confirmations WHERE datetime(created_at) < ?",
+            (cutoff,),
+        )
+        return cur.rowcount
 
 
 def pop_pending(token_hash: str) -> dict | None:
