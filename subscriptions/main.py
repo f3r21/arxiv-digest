@@ -36,6 +36,9 @@ logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 SUBSCRIBE_RATE_PER_HOUR = int(os.environ.get("SUBSCRIBE_RATE_PER_HOUR", "5"))
+# Per-IP daily limit, so a single source cannot drain CONFIRM_DAILY_CAP with
+# a stream of fresh addresses that the per-recipient caps never see.
+SUBSCRIBE_RATE_PER_DAY = int(os.environ.get("SUBSCRIBE_RATE_PER_DAY", "5"))
 # Confirmation emails per UTC day across all recipients. Resend's free tier
 # allows 100 emails/day shared with the digest, so keep this well below it.
 CONFIRM_DAILY_CAP = int(os.environ.get("CONFIRM_DAILY_CAP", "20"))
@@ -336,8 +339,13 @@ def _send_confirmation_email(
         logger.error("ERROR: confirmation email send failed: %s", exc)
 
 
+def _subscribe_rate_limits() -> str:
+    """Per-IP limits for POST /subscribe, read on each request."""
+    return f"{SUBSCRIBE_RATE_PER_HOUR}/hour;{SUBSCRIBE_RATE_PER_DAY}/day"
+
+
 @app.post("/subscribe")
-@limiter.limit(f"{SUBSCRIBE_RATE_PER_HOUR}/hour")
+@limiter.limit(_subscribe_rate_limits)
 async def subscribe(
     request: Request,
     background_tasks: BackgroundTasks,

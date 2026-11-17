@@ -325,6 +325,23 @@ def test_subscribe_responds_before_sending_the_email(monkeypatch):
     assert events == ["status 202", "response complete", "smtp"]
 
 
+def test_one_ip_cannot_use_up_the_daily_budget(client, monkeypatch):
+    """A per-IP daily limit stops a single source from draining CONFIRM_DAILY_CAP."""
+    c, sent = client
+    monkeypatch.setattr(main, "SUBSCRIBE_RATE_PER_DAY", 2)
+    main.limiter.reset()
+    try:
+        codes = [
+            c.post("/subscribe", data={"email": f"drain{i}@example.com", **FORM}).status_code
+            for i in range(3)
+        ]
+    finally:
+        main.limiter.reset()
+
+    assert codes == [202, 202, 429]
+    assert len(sent) == 2
+
+
 # === "This wasn't me" link ===
 
 
