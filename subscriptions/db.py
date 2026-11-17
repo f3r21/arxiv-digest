@@ -4,7 +4,6 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
@@ -46,6 +45,9 @@ def init_db() -> None:
                 keywords_json   TEXT NOT NULL DEFAULT '[]',
                 max_papers      INTEGER NOT NULL DEFAULT 15,
                 confirmed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                -- Legacy soft-delete marker. Unsubscribe now hard-deletes and
+                -- legacy rows are purged at startup, but digest and listener
+                -- still filter on this column, so it stays in the schema.
                 unsubscribed_at TEXT,
                 source          TEXT DEFAULT 'web'
             );
@@ -108,7 +110,7 @@ def find_by_email(email: str) -> Subscriber | None:
     email_norm = email.strip().lower()
     with _conn() as c:
         row = c.execute(
-            "SELECT * FROM subscribers WHERE email = ? AND unsubscribed_at IS NULL",
+            "SELECT * FROM subscribers WHERE email = ?",
             (email_norm,),
         ).fetchone()
     return _row_to_subscriber(row) if row else None
@@ -117,7 +119,7 @@ def find_by_email(email: str) -> Subscriber | None:
 def list_active() -> list[Subscriber]:
     with _conn() as c:
         rows = c.execute(
-            "SELECT * FROM subscribers WHERE unsubscribed_at IS NULL ORDER BY id"
+            "SELECT * FROM subscribers ORDER BY id"
         ).fetchall()
     return [_row_to_subscriber(r) for r in rows]
 
@@ -140,7 +142,6 @@ def insert_subscriber(
                 categories_json = excluded.categories_json,
                 keywords_json   = excluded.keywords_json,
                 max_papers      = excluded.max_papers,
-                unsubscribed_at = NULL,
                 confirmed_at    = CURRENT_TIMESTAMP
             """,
             (
@@ -159,13 +160,78 @@ def insert_subscriber(
         return int(row["id"])
 
 
-def soft_delete_subscriber(subscriber_id: int) -> None:
-    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+def _purge_in(c: sqlite3.Connection, subscriber_id: int) -> bool:
+    """Delete the subscriber and every row about them on connection `c`.
+
+    Explicit DELETEs instead of ON DELETE CASCADE: digest re-declares its
+    tables without foreign keys, so the cascade cannot be relied on.
+    """
+    row = c.execute(
+        "SELECT email FROM subscribers WHERE id = ?", (subscriber_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    email = str(row["email"])
+    c.execute(
+        "DELETE FROM subscriber_seen_papers WHERE subscriber_id = ?",
+        (subscriber_id,),
+    )
+    c.execute(
+        "DELETE FROM subscriber_last_digest WHERE subscriber_id = ?",
+        (subscriber_id,),
+    )
+    c.execute("DELETE FROM pending_confirmations WHERE email = ?", (email,))
+    c.execute("DELETE FROM subscribe_attempts WHERE email = ?", (email,))
+    c.execute("DELETE FROM subscribers WHERE id = ?", (subscriber_id,))
+    return True
+
+
+def purge_subscriber(subscriber_id: int) -> bool:
+    """Hard-delete a subscriber and all their data in one transaction.
+
+    Returns False when the id does not exist (already purged).
+    """
     with _conn() as c:
-        c.execute(
-            "UPDATE subscribers SET unsubscribed_at = ? WHERE id = ?",
-            (now, subscriber_id),
-        )
+        # Take the write lock before the SELECT so the lookup and the
+        # DELETEs form one atomic unit.
+        c.execute("BEGIN IMMEDIATE")
+        return _purge_in(c, subscriber_id)
+
+
+def purge_legacy_unsubscribed() -> int:
+    """Hard-delete subscribers left soft-deleted by the old unsubscribe flow.
+
+    Idempotent one-time cleanup run at startup; returns how many were purged.
+    """
+    with _conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        ids = [
+            int(r["id"])
+            for r in c.execute(
+                "SELECT id FROM subscribers WHERE unsubscribed_at IS NOT NULL"
+            )
+        ]
+        for sub_id in ids:
+            _purge_in(c, sub_id)
+    return len(ids)
+
+
+def purge_orphan_digest_rows() -> int:
+    """Delete digest state rows whose subscriber no longer exists.
+
+    digest loads subscribers once per run and writes their state afterwards,
+    so a purge that lands mid-run can leave rows for a deleted id when the
+    tables have no foreign keys. Idempotent; run at startup. Returns the
+    number of rows deleted.
+    """
+    deleted = 0
+    with _conn() as c:
+        for table in ("subscriber_seen_papers", "subscriber_last_digest"):
+            deleted += c.execute(
+                f"DELETE FROM {table} "
+                "WHERE subscriber_id NOT IN (SELECT id FROM subscribers)"
+            ).rowcount
+    return deleted
 
 
 def get_subscriber_by_id(subscriber_id: int) -> Subscriber | None:
@@ -182,10 +248,9 @@ def update_subscription_for(
     keywords: list[str],
     max_papers: int,
 ) -> bool:
-    """Actualiza categories/keywords/max_papers de un suscriptor activo.
+    """Update categories/keywords/max_papers of a subscriber.
 
-    Devuelve True si actualizo, False si el suscriptor no existe o ya
-    esta dado de baja.
+    Returns False when the subscriber does not exist (e.g. already purged).
     """
     with _conn() as c:
         cur = c.execute(
@@ -194,7 +259,7 @@ def update_subscription_for(
             SET categories_json = ?,
                 keywords_json   = ?,
                 max_papers      = ?
-            WHERE id = ? AND unsubscribed_at IS NULL
+            WHERE id = ?
             """,
             (
                 json.dumps(categories),
