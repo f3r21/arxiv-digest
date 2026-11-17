@@ -172,6 +172,24 @@ def test_smtp_failure_writes_neither_snapshot_nor_seen(env):
     assert seen_ids(ok_id) == {"2611.00001", "2611.00002"}
 
 
+def test_failed_seen_write_rolls_back_the_snapshot(env):
+    # The email goes out, then the second write of the delivery record
+    # fails. Snapshot and seen marks share one transaction, so the
+    # snapshot upsert must be rolled back with it.
+    sub_id = add_subscriber(env, "ok@example.com")
+    with sqlite3.connect(env["tmp"] / "subscribers.db") as c:
+        c.execute(
+            "CREATE TRIGGER fail_seen BEFORE INSERT ON subscriber_seen_papers "
+            "BEGIN SELECT RAISE(ABORT, 'injected seen failure'); END"
+        )
+
+    main.run_digest()
+
+    assert [m["To"] for m in FakeSMTP.sent] == ["ok@example.com"]
+    assert snapshot_for(env, sub_id) is None
+    assert seen_ids(sub_id) == set()
+
+
 def test_any_failed_send_pings_fail_with_counts(env):
     add_subscriber(env, "ok@example.com")
     add_subscriber(env, "bad@example.com")
