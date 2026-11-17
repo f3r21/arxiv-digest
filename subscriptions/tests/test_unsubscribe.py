@@ -285,3 +285,54 @@ def test_purge_subscriber_unknown_id_is_a_no_op():
     db.purge_subscriber(bob + 999)
 
     assert _rows_about(bob, "bob@example.com") == ALL_PRESENT
+
+
+# Copy of digest/subscriber_repo.py init_state_tables() DDL: no foreign keys.
+# When digest creates these tables before subscriptions does, ON DELETE
+# CASCADE does not exist and the purge has to delete the rows explicitly.
+DIGEST_FK_LESS_DDL = """
+    CREATE TABLE IF NOT EXISTS subscriber_seen_papers (
+        subscriber_id INTEGER NOT NULL,
+        arxiv_id      TEXT NOT NULL,
+        seen_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (subscriber_id, arxiv_id)
+    );
+    CREATE TABLE IF NOT EXISTS subscriber_last_digest (
+        subscriber_id INTEGER PRIMARY KEY,
+        issue         INTEGER NOT NULL,
+        sent_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        papers_json   TEXT NOT NULL
+    );
+"""
+
+
+@pytest.fixture
+def digest_created_tables(tmp_path, monkeypatch):
+    """A fresh DB where digest created its tables first (no FKs, no cascade)."""
+    path = tmp_path / "digest-first" / "subscribers.db"
+    path.parent.mkdir()
+    monkeypatch.setattr(db, "DATA_DIR", path.parent)
+    monkeypatch.setattr(db, "DB_PATH", path)
+    with sqlite3.connect(path) as c:
+        c.executescript(DIGEST_FK_LESS_DDL)
+    db.init_db()
+
+
+@pytest.mark.parametrize(
+    "form", [None, {"List-Unsubscribe": "One-Click"}], ids=["form", "one-click"]
+)
+def test_unsubscribe_purges_rows_in_tables_without_cascade(
+    client, digest_created_tables, form
+):
+    with _raw() as c:
+        ddl = c.execute(
+            "SELECT sql FROM sqlite_master WHERE name = 'subscriber_seen_papers'"
+        ).fetchone()[0]
+    assert "REFERENCES" not in ddl
+    sub_id = _seed_full_subscriber("alice@example.com")
+
+    r = client.post(f"/unsubscribe?token={tokens.make_unsubscribe_token(sub_id)}", data=form)
+
+    assert r.status_code == 200
+    assert _rows_about(sub_id, "alice@example.com") == NONE_PRESENT
+
