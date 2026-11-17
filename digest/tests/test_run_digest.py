@@ -325,3 +325,36 @@ def test_empty_arxiv_pings_fail_and_sends_nothing(env):
         "https://hc.example/ping/abc/start",
         "https://hc.example/ping/abc/fail",
     ]
+
+
+class _StopLoop(Exception):
+    pass
+
+
+def test_startup_with_run_now_skips_catch_up(env, monkeypatch):
+    # RUN_NOW already ran today's digest at startup. Even when it found no
+    # papers (so no issue row exists), catch-up must not query arXiv again.
+    add_subscriber(env, "ok@example.com")
+    env["fetched"]["papers"] = []
+    fetches = []
+    monkeypatch.setattr(
+        main,
+        "fetch_papers",
+        lambda cats, max_results=0: fetches.append(cats) or [],
+    )
+    monkeypatch.setattr(main, "DIGEST_HOUR", "00:00")
+    monkeypatch.setattr(main, "ALIVE_FILE", env["tmp"] / "alive")
+    monkeypatch.setenv("RUN_NOW", "1")
+
+    def stop(_seconds):
+        raise _StopLoop
+
+    monkeypatch.setattr(main.time, "sleep", stop)
+    try:
+        with pytest.raises(_StopLoop):
+            main.main()
+    finally:
+        main.schedule.clear()
+
+    assert len(fetches) == 1
+    assert (env["tmp"] / "alive").exists()

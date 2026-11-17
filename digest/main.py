@@ -343,10 +343,13 @@ def main() -> None:
             run_digest()
         except Exception as exc:
             logger.error("ERROR: RUN_NOW digest fallo: %s", exc)
-    try:
-        catch_up_if_missed()
-    except Exception as exc:
-        logger.error("ERROR: catch-up digest failed: %s", exc)
+    else:
+        # RUN_NOW already covers this startup; a catch-up on top would hit
+        # arXiv twice (an empty run leaves no issue row to detect it).
+        try:
+            catch_up_if_missed()
+        except Exception as exc:
+            logger.error("ERROR: catch-up digest failed: %s", exc)
     schedule.every().day.at(DIGEST_HOUR).do(run_digest)
     logger.info("INIT: scheduler arrancado, proximo digest a las %s", DIGEST_HOUR)
     while True:
