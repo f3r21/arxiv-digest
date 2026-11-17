@@ -129,7 +129,14 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
 
 def _reply_to(sub: Subscriber, msg: dict, backend: InboxBackend, now: datetime) -> None:
     msg_id = msg["id"]
-    # Fetched only for known senders: each body costs a Mailsac API call.
+    cap = _cap_reached(sub.id, now)
+    if cap:
+        logger.warning(
+            "WARN: sub=%d hit the %s; no reply for msg %s", sub.id, cap, msg_id
+        )
+        _finish(msg_id, backend)
+        return
+    # Fetched only for known senders under their cap: each body costs a Mailsac API call.
     numbers = parse_reply(backend.fetch_body(msg_id))
     if not numbers:
         logger.info(
@@ -151,13 +158,6 @@ def _reply_to(sub: Subscriber, msg: dict, backend: InboxBackend, now: datetime) 
         logger.info(
             "PROFILE: sub=%d asked only for out-of-range numbers, dropping msg %s",
             sub.id, msg_id,
-        )
-        _finish(msg_id, backend)
-        return
-    cap = _cap_reached(sub.id, now)
-    if cap:
-        logger.warning(
-            "WARN: sub=%d hit the %s; no reply for msg %s", sub.id, cap, msg_id
         )
         _finish(msg_id, backend)
         return

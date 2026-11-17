@@ -84,3 +84,18 @@ def test_caps_reset_at_midnight_utc_not_local_time(inbox, smtp, add_subscriber, 
 def test_default_caps_come_from_the_environment():
     assert main.REPLY_DAILY_CAP_PER_SUB == 5
     assert 0 < main.REPLY_DAILY_CAP_GLOBAL < 100
+
+
+def test_capped_subscriber_costs_no_body_fetch(inbox, smtp, add_subscriber, caps):
+    # Each Mailsac body fetch is a billed API call; a capped sender should not cost one.
+    caps(per_sub=1)
+    add_subscriber("ana@example.com", PAPERS)
+    inbox.add("m1", "ana@example.com", "1")
+    main.poll_once(inbox, now=NOON_UTC)
+    inbox.add("m2", "ana@example.com", "2")
+    inbox.add("m3", "ana@example.com", "2")
+    main.poll_once(inbox, now=NOON_UTC)
+
+    assert inbox.fetched == ["m1"]
+    assert db.is_processed("m2") and db.is_processed("m3")
+    assert len(smtp.outbox) == 1
