@@ -5,7 +5,7 @@
 Sistema multi-usuario que envía un digest diario de papers nuevos
 de [arXiv](https://arxiv.org) a cada suscriptor con **sus propias categorías**
 y keywords. Respondes el email con los números de los papers que te interesan
-y el sistema te devuelve esos PDFs como adjuntos.
+y el sistema te devuelve enlaces a esos PDFs.
 
 Cualquiera se suscribe desde un formulario web (con double opt-in) y elige
 entre todas las **155 categorías oficiales de arXiv** (cs.\*, math.\*,
@@ -43,8 +43,8 @@ Seis servicios orquestados por `docker-compose.yml`:
                          |  (buzon)  |
                          +-----------+
                                 ^
-   arXiv PDFs <-----    +-----------+  <-- poll inbox API ---/
-                        |  listener | --SMTP (reply + PDFs)--> sender real
+                        +-----------+  <-- poll inbox API ---/
+                        |  listener | --SMTP (reply + links)-> sender real
                         +-----------+
 ```
 
@@ -64,7 +64,7 @@ Seis servicios orquestados por `docker-compose.yml`:
   cuesta una sola llamada.
 - **listener** — hace polling al inbox configurado; cuando ve un reply,
   resuelve el `From` contra la tabla de suscriptores, busca el snapshot
-  per-usuario y le devuelve los PDFs al sender. Mensajes de senders
+  per-usuario y le devuelve enlaces a los PDFs al sender. Mensajes de senders
   desconocidos se descartan con log.
 - **mailhog** — servidor SMTP de prueba con interfaz web; hace de buzón en
   dev. **No se expone a internet** (puertos sólo en `127.0.0.1`).
@@ -150,7 +150,7 @@ suscriptores activos y manda un email personalizado a cada uno.
 
 Cuando respondes el digest con números de paper, el listener identifica al
 suscriptor por tu `From`, lee tu snapshot personal del último digest y te
-devuelve los PDFs.
+devuelve enlaces a los PDFs.
 
 ### Opción A — desde la interfaz de MailHog
 
@@ -160,7 +160,7 @@ devuelve los PDFs.
 3. Asegúrate que `From: a@local` (el email con el que te suscribiste).
 4. En el cuerpo escribe los números, por ejemplo: `quiero los papers 1, 3 y 5`.
 5. **Send**. En ~30 s aparece un email `Re: ...` dirigido a `a@local` con los
-   PDFs adjuntos. Replies de senders no suscritos se descartan (revisa los
+   enlaces a los PDFs. Replies de senders no suscritos se descartan (revisa los
    logs del listener: `docker compose logs listener`).
 
 ### Opción B — con el helper `tools/send_test_reply.py`
@@ -257,7 +257,7 @@ Para recibir el digest en un correo real **sin Gmail + app password**:
 
 El digest llegará a tu Gmail (`From: tucorreo@gmail.com`,
 `Reply-To: tu-inbox@mailsac.com`). Cuando respondas, la reply va a Mailsac; el
-listener la lee por API y te manda los PDFs.
+listener la lee por API y te manda enlaces a los PDFs.
 
 **Rate-limit Mailsac**: el plan gratis da 1500 calls/mes; con `POLL_INTERVAL_S=600`
 (10 min) gastas ~4320 calls/mes. Si esperás muchos suscriptores activos,
@@ -361,8 +361,7 @@ arxiv-digest/
 │   │   ├── mailhog.py      # cliente HTTP de MailHog
 │   │   └── mailsac.py      # cliente REST de Mailsac
 │   ├── reply_parser.py     # extrae numeros del reply
-│   ├── pdf_downloader.py   # baja los PDFs de arXiv
-│   ├── email_sender.py     # responde con adjuntos
+│   ├── email_sender.py     # responde con enlaces
 │   └── db.py               # SQLite de idempotencia
 ├── tools/
 │   ├── send_test_reply.py    # helper para probar el flujo de reply

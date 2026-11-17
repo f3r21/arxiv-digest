@@ -44,9 +44,8 @@ graph TB
     GMAIL -->|Reply-To| MAILSAC
     LIST -->|poll API| MAILSAC
     LIST -->|read snapshot| DB
-    LIST -->|download PDFs| ARXIV
-    LIST -->|SMTP attach| GMAIL
-    GMAIL -->|📎 PDFs| USER
+    LIST -->|SMTP links| GMAIL
+    GMAIL -->|PDF links| USER
 
     DIGEST -.->|ping ok/fail| HC
     HC -.->|alert email<br/>si 25h sin ping| USER
@@ -103,10 +102,8 @@ sequenceDiagram
     M-->>L: 1 new message
     L->>L: parse_reply(body) → [1, 3]
     L->>DB: get last_digest for sender
-    L->>A: download PDFs[1, 3]
-    A-->>L: 2 PDFs
-    L->>G: SMTP send with attachments
-    G->>U: 📎 2 PDFs adjuntos
+    L->>G: SMTP send with arXiv links for [1, 3]
+    G->>U: 2 enlaces a PDFs
 ```
 
 ## Decisiones clave
