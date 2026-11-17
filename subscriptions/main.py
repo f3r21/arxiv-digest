@@ -321,9 +321,7 @@ async def subscribe(
     keywords: Annotated[str, Form()] = "",
     max_papers: Annotated[int, Form()] = 15,
 ) -> JSONResponse:
-    ip = get_remote_address(request)
     email_norm = _validate_email_or_400(email)
-    db.log_subscribe_attempt(ip, email_norm)
 
     valid_cats = cats.validate_codes(categories)
     if not valid_cats:
@@ -342,7 +340,7 @@ async def subscribe(
         "max_papers": max_p,
     }
     token = tokens.make_confirm_token(email_norm)
-    db.store_pending(tokens.hash_token(token), email_norm, payload, ip)
+    db.store_pending(tokens.hash_token(token), email_norm, payload)
 
     try:
         email_outbound.send_confirmation(email_norm, token, valid_cats)

@@ -58,7 +58,6 @@ def init_db() -> None:
                 token_hash TEXT PRIMARY KEY,
                 email      TEXT NOT NULL COLLATE NOCASE,
                 payload    TEXT NOT NULL,
-                ip         TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -85,13 +84,20 @@ def init_db() -> None:
                 total_papers_sent INTEGER NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS subscribe_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ip TEXT,
-                email TEXT,
-                at TEXT DEFAULT CURRENT_TIMESTAMP
-            );
+            -- Legacy: stored client IP + raw email and nothing read it.
+            DROP TABLE IF EXISTS subscribe_attempts;
         """)
+        _drop_legacy_pending_ip_column(c)
+
+
+def _drop_legacy_pending_ip_column(c: sqlite3.Connection) -> None:
+    """Older schemas kept the client IP on each pending confirmation."""
+    columns = {
+        row["name"]
+        for row in c.execute("PRAGMA table_info(pending_confirmations)")
+    }
+    if "ip" in columns:
+        c.execute("ALTER TABLE pending_confirmations DROP COLUMN ip")
 
 
 def _row_to_subscriber(row: sqlite3.Row) -> Subscriber:
@@ -206,22 +212,19 @@ def update_subscription_for(
         return cur.rowcount > 0
 
 
-def store_pending(
-    token_hash: str, email: str, payload: dict, ip: str | None
-) -> None:
+def store_pending(token_hash: str, email: str, payload: dict) -> None:
     email_norm = email.strip().lower()
     with _conn() as c:
         c.execute(
             """
-            INSERT INTO pending_confirmations (token_hash, email, payload, ip)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO pending_confirmations (token_hash, email, payload)
+            VALUES (?, ?, ?)
             ON CONFLICT(token_hash) DO UPDATE SET
                 email = excluded.email,
                 payload = excluded.payload,
-                ip = excluded.ip,
                 created_at = CURRENT_TIMESTAMP
             """,
-            (token_hash, email_norm, json.dumps(payload), ip),
+            (token_hash, email_norm, json.dumps(payload)),
         )
 
 
@@ -242,10 +245,3 @@ def pop_pending(token_hash: str) -> dict | None:
         "payload": dict(json.loads(row["payload"])),
     }
 
-
-def log_subscribe_attempt(ip: str | None, email: str | None) -> None:
-    with _conn() as c:
-        c.execute(
-            "INSERT INTO subscribe_attempts (ip, email) VALUES (?, ?)",
-            (ip or "", (email or "").strip().lower() or None),
-        )
