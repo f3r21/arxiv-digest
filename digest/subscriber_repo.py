@@ -136,8 +136,11 @@ def record_delivery(
 def prune_seen_older_than(days: int) -> int:
     """Delete seen marks older than `days`; return how many rows went.
 
-    The daily arXiv query only returns recent announcements, so a paper
-    seen that long ago cannot come back and its mark is dead weight.
+    Pruning is not safe on its own: the arXiv query has no date bound and
+    can return old papers again. It is safe only because run_digest drops
+    papers published more than SEEN_RETENTION_DAYS ago before filtering
+    (main._within_seen_retention), and a seen mark is never older than its
+    paper's publication. Pass the same `days` as that cut.
     """
     with _conn() as c:
         cur = c.execute(
