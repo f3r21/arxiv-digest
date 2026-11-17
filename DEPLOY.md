@@ -178,13 +178,48 @@ Puede tardar de 1 a 10 min.
 
 ## 5. (Opcional) Inbox para replies con Mailsac
 
-Si querés que los suscriptores puedan responder con números y recibir PDFs:
+Si querés que los suscriptores puedan responder con números y recibir los
+enlaces de esos papers (`arxiv.org/abs/<id>` y `arxiv.org/pdf/<id>`; por ahora
+no se adjuntan PDFs hasta guardar la licencia de cada paper):
 
 1. `mailsac.com` → signup → **Inboxes** → reservar uno (ej.
-   `arxiv-replies@mailsac.com`).
+   `arxiv-replies@mailsac.com`). Tiene que quedar **reservado por tu cuenta**
+   (privado): al arrancar, el listener llama a `GET /api/addresses/{inbox}` y,
+   si el inbox es público, de otra cuenta (401) o no existe (404), loguea
+   `ERROR: inbox guard refused to start` y sale con código 1 tras esperar
+   `POLL_INTERVAL_S`. Un inbox público lo puede leer cualquiera.
 2. **API & Webhooks** → crear API key.
 
-Si NO necesitás reply→PDFs (los suscriptores reciben el digest con links
+### Cuota de Mailsac y `POLL_INTERVAL_S`
+
+El plan gratis da **1500 llamadas a la API por mes**. Cada poll cuesta al
+menos 1 llamada (listar el inbox), aunque no haya mensajes. Además, cada
+respuesta de un suscriptor cuesta 2 más (leer el cuerpo y borrarla), un
+remitente desconocido 1 (borrarlo) y cada arranque del contenedor 1 (el
+chequeo de inbox privado).
+
+```
+mes de 31 días = 2.678.400 s
+POLL_INTERVAL_S=600   -> 4464 polls/mes   (3x el tope: no usar)
+POLL_INTERVAL_S=2100  -> 1275 polls/mes   -> quedan ~225 llamadas
+                         = ~110 respuestas/mes
+```
+
+Por eso en prod se usa `POLL_INTERVAL_S=2100` (35 min): una respuesta tarda
+hasta ~35 min en llegar. Si el volumen de respuestas crece, subilo (2400 s =
+1116 polls/mes) en lugar de bajarlo.
+
+### Topes diarios de respuestas
+
+Las respuestas salen por Resend y comparten sus 100 emails/día con el digest
+(1 por suscriptor) y las confirmaciones. El listener cuenta las respuestas
+enviadas por día UTC en su propia DB y deja de responder al pasar
+`REPLY_DAILY_CAP_PER_SUB` (default 5) o `REPLY_DAILY_CAP_GLOBAL` (default
+10): marca el mensaje como procesado sin responder y loguea un `WARN` con el
+id del suscriptor. Con N suscriptores, mantené
+`REPLY_DAILY_CAP_GLOBAL <= 100 - N - confirmaciones esperadas`.
+
+Si NO necesitás reply→enlaces (los suscriptores reciben el digest con links
 directos a arXiv y ya), saltate Mailsac. En `.env.prod` poné
 `INBOX_BACKEND=mailsac` igual pero con la key dummy, o cambialo a `mailhog`
 local y comentá el listener en el compose.
@@ -226,7 +261,7 @@ INBOX_BACKEND=mailsac
 MAILSAC_API_KEY=k_xxxxxxxx
 MAILSAC_INBOX=arxiv-replies@mailsac.com
 SELF_ADDR=digest@arxivdigest.mooo.com
-POLL_INTERVAL_S=600
+POLL_INTERVAL_S=2100   # 35 min; ver "Cuota de Mailsac" en la sección 5
 
 SEED_SUBSCRIBER_CATEGORIES=cs.DC,cs.AI
 EXPOSE_ADMIN=0
@@ -298,9 +333,9 @@ Encrypt (puede tardar 30 s).
    Si arXiv te bloquea (`fetched 0 papers`), esperá unas horas o probá con
    menos categorías. Para la demo, dispará con horas de antelación.
 
-5. **Reply→PDFs**: responder el digest desde el Gmail con "1 3 5". El
-   listener (poll cada 10 min en prod) levanta el reply de Mailsac y te
-   devuelve los PDFs adjuntos.
+5. **Reply→enlaces**: responder el digest desde el Gmail con "1 3 5". El
+   listener (poll cada 35 min en prod) levanta el reply de Mailsac y te
+   responde con los enlaces abs/pdf de esos papers (sin adjuntos).
 
 ---
 
@@ -340,6 +375,8 @@ en Oracle Security List o iptables, dominio con typo en `.env.prod`.
 **Mailsac no recibe replies.**
 - Verificar que `REPLY_TO=tu-inbox@mailsac.com` matchea el inbox creado.
 - Confirmar API key activa.
+- Si el listener se reinicia en loop con `ERROR: inbox guard refused to
+  start`, el inbox no está reservado por la cuenta de la API key.
 
 **Out of memory** (posible en E2.1.Micro de 1 GB; el stack idle usa ~155 MB).
 ```bash
