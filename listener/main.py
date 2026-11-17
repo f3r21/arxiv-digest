@@ -83,7 +83,8 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
         logger.info("PROFILE: sender desconocido (%s), drop msg %s", sender, msg_id)
         _finish(msg_id, backend)
         return
-    numbers = parse_reply(msg.get("body", ""))
+    # Fetched only for known senders: each body costs a Mailsac API call.
+    numbers = parse_reply(backend.fetch_body(msg_id))
     if not numbers:
         logger.info(
             "PROFILE: reply de sub=%s sin numeros validos, drop msg %s",
@@ -133,9 +134,11 @@ def _process_message(msg: dict, backend: InboxBackend, now: datetime) -> None:
 def poll_once(backend: InboxBackend, now: datetime | None = None) -> None:
     """Process every unprocessed message currently in the inbox.
 
+    A listing error propagates. An error on one message (body fetch, locked DB)
+    is logged and leaves that message unprocessed for the next poll.
     `now` (timezone-aware) dates the replies for the daily caps; defaults to the current time.
     """
-    for msg in backend.fetch_messages():
+    for msg in backend.list_messages():
         if is_processed(msg["id"]):
             continue
         try:

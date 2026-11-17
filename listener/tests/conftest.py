@@ -28,8 +28,14 @@ class FakeInbox:
             "recipient": "replies@example.test",
         }
 
-    def fetch_messages(self) -> list[dict]:
-        return [dict(m) for m in self.messages.values()]
+    def list_messages(self) -> list[dict]:
+        return [
+            {k: v for k, v in m.items() if k != "body"}
+            for m in self.messages.values()
+        ]
+
+    def fetch_body(self, msg_id: str) -> str:
+        return self.messages[msg_id]["body"]
 
     def delete_message(self, msg_id: str) -> None:
         self.deleted.append(msg_id)
