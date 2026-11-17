@@ -93,10 +93,9 @@ def send_digest_to(
         f"{len(papers)} papers"
     )
     msg["List-Id"] = f"The Daily Abstract <digest.{SUBSCRIPTIONS_DOMAIN}>"
-    msg["List-Unsubscribe"] = (
-        f"<{unsubscribe_url}>, "
-        f"<mailto:unsubscribe@{SUBSCRIPTIONS_DOMAIN}?subject=unsub-{subscriber.id}>"
-    )
+    # HTTPS one-click only (RFC 8058). No mailto: nothing reads that mailbox,
+    # and the subject would expose the sequential subscriber id.
+    msg["List-Unsubscribe"] = f"<{unsubscribe_url}>"
     msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")

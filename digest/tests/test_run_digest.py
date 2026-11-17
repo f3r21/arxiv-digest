@@ -192,6 +192,20 @@ def test_all_sends_ok_pings_ok(env):
     ]
 
 
+def test_list_unsubscribe_is_https_one_click_without_mailto(env):
+    add_subscriber(env, "ok@example.com")
+
+    main.run_digest()
+
+    msg = FakeSMTP.sent[0]
+    header = msg["List-Unsubscribe"]
+    assert "mailto:" not in header
+    assert header.startswith("<https://localhost/unsubscribe?token=")
+    assert header.endswith(">")
+    assert header.count("<") == 1
+    assert msg["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+
+
 def test_empty_arxiv_pings_fail_and_sends_nothing(env):
     add_subscriber(env, "ok@example.com")
     env["fetched"]["papers"] = []
