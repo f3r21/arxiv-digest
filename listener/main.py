@@ -262,6 +262,9 @@ def startup_guard(
 
 
 def main() -> None:
+    # /tmp survives a Docker restart of the same container: clear a stale alive
+    # file so a refused start cannot pass the healthcheck.
+    ALIVE_FILE.unlink(missing_ok=True)
     init_db()
     backend = create_backend()
     startup_guard(backend)

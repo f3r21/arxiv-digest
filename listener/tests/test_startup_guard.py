@@ -61,3 +61,19 @@ def test_startup_guard_passes_for_an_owned_address(backend_with):
     backend, _ = backend_with(FakeResponse(json_data={"_id": INBOX, "owner": "acct"}))
 
     main.startup_guard(backend, sleep=pytest.fail)
+
+
+def test_refused_start_clears_a_stale_alive_file(backend_with, tmp_path, monkeypatch):
+    # With restart: always, /tmp survives a restart; a leftover alive file
+    # would keep the healthcheck green while the guard refuses to run.
+    backend, _ = backend_with(FakeResponse(404))
+    alive = tmp_path / "alive"
+    alive.touch()
+    monkeypatch.setattr(main, "ALIVE_FILE", alive)
+    monkeypatch.setattr(main, "create_backend", lambda: backend)
+    monkeypatch.setattr(main, "POLL_INTERVAL_S", 0)
+
+    with pytest.raises(SystemExit):
+        main.main()
+
+    assert not alive.exists()
