@@ -7,7 +7,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "mailhog")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "1025"))
@@ -19,8 +19,12 @@ REPLY_TO = os.environ.get("REPLY_TO", "").strip()
 SUBSCRIPTIONS_DOMAIN = os.environ.get("SUBSCRIPTIONS_DOMAIN", "localhost").strip()
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
-# Module-level Jinja env, reused across sends
-_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+# Module-level Jinja env, reused across sends. Titles come from arXiv and often
+# contain < and &, so HTML templates are escaped; reply.txt stays raw.
+_env = Environment(
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    autoescape=select_autoescape(["html"]),
+)
 
 
 def _pretty_numbers(nums: list[int]) -> str:

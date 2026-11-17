@@ -61,3 +61,17 @@ def test_no_reply_when_no_number_is_in_range(inbox, smtp, add_subscriber):
 
     assert smtp.outbox == []
     assert db.is_processed("m1")
+
+
+def test_html_reply_escapes_titles_and_text_reply_keeps_them_raw(
+    inbox, smtp, add_subscriber
+):
+    add_subscriber("ana@example.com", [make_paper("2411.00009", "Bounds for p<1 & q>2")])
+    inbox.add("m1", "ana@example.com", "1")
+
+    main.poll_once(inbox)
+
+    text, html = _bodies(smtp.outbox[0])
+    assert "Bounds for p&lt;1 &amp; q&gt;2" in html
+    assert "p<1" not in html
+    assert "Bounds for p<1 & q>2" in text
