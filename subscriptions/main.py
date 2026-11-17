@@ -59,6 +59,9 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup: init DB, catalog, seed; shutdown: nada que cerrar."""
     db.init_db()
+    purged = db.purge_legacy_unsubscribed()
+    if purged:
+        logger.info("INIT: purged %d legacy soft-deleted subscribers", purged)
     cats.load()
     seed_from_env()
     logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)
@@ -462,8 +465,7 @@ def manage_get(
             status_code=400,
         )
     sub = db.get_subscriber_by_id(sub_id)
-    if sub is None or db.find_by_email(sub.email) is None:
-        # exists pero esta unsubscribed
+    if sub is None:  # purged after the link was issued
         return templates.TemplateResponse(
             "confirm_expired.html",
             _common_ctx(request),

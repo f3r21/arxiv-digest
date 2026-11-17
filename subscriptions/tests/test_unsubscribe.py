@@ -229,6 +229,39 @@ def test_resubscribe_after_purge_is_a_fresh_signup(client, monkeypatch):
     assert db.list_active() == [fresh]
 
 
+def _mark_legacy_soft_deleted(sub_id: int) -> None:
+    """What the old unsubscribe did: set unsubscribed_at and keep everything."""
+    with _raw() as c:
+        c.execute(
+            "UPDATE subscribers SET unsubscribed_at = '2026-01-01T00:00:00+00:00' "
+            "WHERE id = ?",
+            (sub_id,),
+        )
+
+
+def test_purge_legacy_unsubscribed_removes_soft_deleted_rows_idempotently():
+    gone = _seed_full_subscriber("gone@example.com")
+    kept = _seed_full_subscriber("kept@example.com")
+    _mark_legacy_soft_deleted(gone)
+
+    assert db.purge_legacy_unsubscribed() == 1
+    assert db.purge_legacy_unsubscribed() == 0
+
+    assert _rows_about(gone, "gone@example.com") == NONE_PRESENT
+    assert _rows_about(kept, "kept@example.com") == ALL_PRESENT
+
+
+def test_startup_purges_legacy_soft_deleted_rows(monkeypatch):
+    monkeypatch.delenv("RECIPIENT", raising=False)
+    gone = _seed_full_subscriber("gone@example.com")
+    _mark_legacy_soft_deleted(gone)
+
+    with TestClient(main.app):
+        pass
+
+    assert _rows_about(gone, "gone@example.com") == NONE_PRESENT
+
+
 def test_purge_subscriber_unknown_id_is_a_no_op():
     bob = _seed_full_subscriber("bob@example.com")
 

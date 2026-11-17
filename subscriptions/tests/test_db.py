@@ -40,22 +40,24 @@ def test_insert_same_email_upserts():
     assert sub.max_papers == 20
 
 
-def test_soft_delete_excludes_from_active_list():
+def test_purge_removes_from_active_list_and_lookups():
     sub_id = db.insert_subscriber("a@b.com", ["cs.DC"], [], 15)
     assert len(db.list_active()) == 1
-    db.soft_delete_subscriber(sub_id)
+    assert db.purge_subscriber(sub_id) is True
     assert db.list_active() == []
-    # find_by_email tambien lo filtra
     assert db.find_by_email("a@b.com") is None
+    assert db.get_subscriber_by_id(sub_id) is None
+    assert db.update_subscription_for(sub_id, ["cs.AI"], [], 5) is False
+    assert db.purge_subscriber(sub_id) is False
 
 
-def test_resubscribe_after_unsubscribe_reactivates():
-    sub_id = db.insert_subscriber("a@b.com", ["cs.DC"], [], 15)
-    db.soft_delete_subscriber(sub_id)
-    assert db.list_active() == []
+def test_resubscribe_after_purge_creates_a_new_record():
+    sub_id = db.insert_subscriber("a@b.com", ["cs.DC"], ["old"], 15)
+    db.purge_subscriber(sub_id)
     sub_id_2 = db.insert_subscriber("a@b.com", ["cs.AI"], [], 10)
-    assert sub_id_2 == sub_id  # mismo registro
-    assert len(db.list_active()) == 1
+    assert sub_id_2 != sub_id  # AUTOINCREMENT never reuses a purged id
+    [sub] = db.list_active()
+    assert (sub.categories, sub.keywords, sub.max_papers) == (["cs.AI"], [], 10)
 
 
 def test_pending_confirmation_roundtrip():
