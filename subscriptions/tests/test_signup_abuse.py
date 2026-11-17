@@ -91,15 +91,52 @@ def test_init_db_purges_ips_from_a_legacy_database(isolated_db):
     assert db.pop_pending("h1")["email"] == "old@example.com"
 
 
-def test_pending_confirmations_expire_after_ttl():
+def _age_pending(token_hash: str, hours: float) -> None:
+    """Backdate one pending confirmation by `hours`."""
+    conn = sqlite3.connect(db.DB_PATH)
+    try:
+        conn.execute(
+            "UPDATE pending_confirmations SET created_at = datetime('now', ?)"
+            " WHERE token_hash = ?",
+            (f"-{hours} hours", token_hash),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_prune_deletes_only_pending_confirmations_past_the_ttl():
     db.store_pending("fresh", "a@example.com", {"categories": ["cs.DC"]})
     db.store_pending("stale", "b@example.com", {"categories": ["cs.DC"]})
-    now = datetime.now(timezone.utc)
+    _age_pending("fresh", 47)
+    _age_pending("stale", 49)
 
-    db.prune_expired_pending(ttl_hours=48, now=now + timedelta(hours=47))
+    assert db.prune_expired_pending(ttl_hours=48) == 1
+
+    assert db.pop_pending("stale") is None
     assert db.pop_pending("fresh") is not None
 
-    db.prune_expired_pending(ttl_hours=48, now=now + timedelta(hours=49))
+
+def test_subscribe_prunes_expired_pending_confirmations(client):
+    c, sent = client
+    db.store_pending("stale", "old@example.com", {"categories": ["cs.DC"]})
+    _age_pending("stale", 49)
+
+    r = c.post("/subscribe", data={"email": "new@example.com", **FORM})
+    assert r.status_code == 202
+
+    assert db.pop_pending("stale") is None
+    assert db.pop_pending(tokens.hash_token(sent[-1]["token"])) is not None
+
+
+def test_startup_prunes_expired_pending_confirmations(monkeypatch):
+    monkeypatch.delenv("RECIPIENT", raising=False)
+    db.store_pending("stale", "old@example.com", {"categories": ["cs.DC"]})
+    _age_pending("stale", 49)
+
+    with TestClient(main.app):
+        pass
+
     assert db.pop_pending("stale") is None
 
 
