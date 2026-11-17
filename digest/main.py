@@ -45,7 +45,8 @@ PUBLIC_PREVIEW_PATH = Path("/app/data/public_digest_preview.json")
 ARCHIVE_DIR = Path("/app/data/archive")
 SEED_SUBSCRIBER_ID = 1  # convencion: el seed siempre es id=1 (creado por subscriptions startup)
 HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "").strip()
-# A paper older than this cannot reappear in a daily announcement query.
+# Seen marks older than this are pruned, and papers published before this
+# window are never sent, so a pruned mark cannot cause a re-send.
 SEEN_RETENTION_DAYS = 30
 
 
