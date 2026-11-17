@@ -28,11 +28,11 @@ import db
 import email_outbound
 import tokens
 
+# Each message carries its own tag (INIT:, RESULT:, WARN:, ...).
+LOG_FORMAT = "%(asctime)s %(name)s %(message)s"
+
 logger = logging.getLogger("subscriptions")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s INIT: %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 SUBSCRIBE_RATE_PER_HOUR = int(os.environ.get("SUBSCRIBE_RATE_PER_HOUR", "5"))

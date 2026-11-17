@@ -332,3 +332,14 @@ def test_confirmation_email_carries_a_not_me_link(monkeypatch):
         match = re.search(r"/not-me\?token=([\w.\-]+)", outbox[0][body])
         assert match, f"no not-me link in the {body} body"
         assert tokens.read_not_me_token(match.group(1)) == VICTIM
+
+
+def test_log_lines_start_with_their_own_tag():
+    import logging
+
+    record = logging.LogRecord(
+        "subscriptions", logging.INFO, __file__, 1, "RESULT: confirm OK", None, None
+    )
+    line = logging.Formatter(main.LOG_FORMAT).format(record)
+    assert line.endswith(" subscriptions RESULT: confirm OK")
+    assert "INIT:" not in line
