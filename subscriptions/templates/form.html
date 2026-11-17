@@ -27,7 +27,7 @@
       <div class="reply-demo" aria-hidden="true">
         <span class="label">Reply with numbers, get PDFs</span>
         <span><span class="you">you →</span> <strong>1 3 5</strong></span>
-        <span><span class="reply">reply ←</span> <em>three PDFs, attached, ~30 s</em></span>
+        <span><span class="reply">reply ←</span> <em>three PDF links, within the hour</em></span>
       </div>
 
       <div class="btn-row">
@@ -82,7 +82,7 @@
             </header>
 
             <div class="pv-intro">
-              Hoy <strong><span id="pv-count">4</span> papers nuevos</strong>. Responde con los números para recibir los PDFs adjuntos.
+              Hoy <strong><span id="pv-count">4</span> papers nuevos</strong>. Responde con los números para recibir los enlaces a los PDFs.
             </div>
 
             <div class="pv-pick">
@@ -142,7 +142,7 @@
             <footer class="pv-foot">
               <div class="brand">The Daily Abstract</div>
               <div>Responde a este correo con los números de los papers que quieres leer.</div>
-              <div>El listener te enviará los PDFs adjuntos en ~30 segundos.</div>
+              <div>El listener te enviará los enlaces a los PDFs en menos de una hora.</div>
               <div class="meta">
                 Suscrito como <strong style="color:#888;">you@university.edu</strong>.
                 <a href="#">Manage subscription</a>
@@ -169,7 +169,7 @@
       </div>
 
       <p style="font-family: var(--font-serif); font-size: var(--text-lg); color: var(--text-muted); max-width: 56ch; margin: 0 0 var(--space-3); line-height: 1.55;">
-        Every digest carries a <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">Reply-To</code> address. Type the integers you want, hit send, and the PDFs come back as attachments — usually inside thirty seconds.
+        Every digest carries a <code style="font-family:var(--font-mono);background:var(--accent-soft);color:var(--accent);padding:0.05em 0.4em;border-radius:3px;">Reply-To</code> address. Type the integers you want, hit send, and you get links to those PDFs back — usually within the hour.
       </p>
 
       <div class="reply-flow" aria-hidden="true">
@@ -196,7 +196,7 @@
 
         <div class="reply-cell">
           <div>
-            <div class="step-label">③ PDFs arrive</div>
+            <div class="step-label">③ PDF links arrive</div>
             <div class="step-body">Re: hoy en arxiv · no. <span class="dyn-issue">03</span> — fetched from arXiv, attached, done.</div>
             <div class="pdfs">
               <span class="pdf">1706.03762.pdf</span>
@@ -340,7 +340,7 @@
         </div></li>
         <li><div>
           <h3>You reply with numbers.</h3>
-          <p>Type <code>1 3 5</code>, or <em>"quiero el 2 y el 7"</em>, or <em>"the second one"</em>. The listener parses the integers, fetches those PDFs from arXiv, and replies with them attached — usually within thirty seconds.</p>
+          <p>Type <code>1 3 5</code>, or <em>"quiero el 2 y el 7"</em>, or <em>"the second one"</em>. The listener parses the integers, looks up those papers, and replies with links to their PDFs on arXiv — usually within the hour.</p>
         </div></li>
         <li><div>
           <h3>Manage anytime.</h3>
@@ -360,7 +360,7 @@
         <dd>Nothing. The whole stack runs on Oracle Cloud's always-free tier (one shared CPU, 1 GB RAM, six Docker containers in ~165 MB idle), plus free quotas of Brevo for outbound mail and Mailsac for reply parsing. If it ever gets popular enough to outgrow that envelope we'll add a Pro tier for power features — but the basic digest stays free, forever.</dd>
 
         <dt>The reply-to-PDF thing — how does that actually work?</dt>
-        <dd>Every digest is sent with <code>Reply-To</code> pointing at a Mailsac inbox we poll every 10 minutes. When a reply arrives, we identify you by your <code>From</code> address, pull up your snapshot of that morning's edition, extract integers from the body (any natural-language wrapper is fine), download those PDFs from arXiv, and reply with them attached. Senders we don't recognise are silently dropped.</dd>
+        <dd>Every digest is sent with <code>Reply-To</code> pointing at a Mailsac inbox we poll about every 35 minutes. When a reply arrives, we identify you by your <code>From</code> address, pull up your snapshot of that morning's edition, extract integers from the body (any natural-language wrapper is fine), and reply with links to those PDFs on arXiv. Senders we don't recognise are silently dropped.</dd>
 
         <dt>Who's behind this?</dt>
         <dd>An indie open-source project. <a href="https://github.com/f3r21/arxiv-digest" target="_blank" rel="noopener">Source on GitHub</a>, MIT licensed, self-hostable end-to-end. Originally built as a university Cloud Computing project; now run as a public service. No company, no investors, no ads, no data resold.</dd>
@@ -389,7 +389,7 @@
     {
       "@type": "Question",
       "name": "How does the reply-to-PDF feature work?",
-      "acceptedAnswer": {"@type":"Answer","text":"Every digest is sent with Reply-To pointing at a monitored inbox. Reply with the paper numbers you want; the PDFs come back as email attachments, usually within thirty seconds."}
+      "acceptedAnswer": {"@type":"Answer","text":"Every digest is sent with Reply-To pointing at a monitored inbox. Reply with the paper numbers you want; you get links to their PDFs back by email, usually within the hour."}
     },
     {
       "@type": "Question",
