@@ -1,13 +1,14 @@
 THE DAILY ABSTRACT
 ==================
 
-Your papers, attached.
+Your papers.
 
-You asked for {{ numbers_pretty }}. {{ 'Here it is' if pdfs|length == 1 else 'Here they are' }}, {{ pdfs|length }} {{ 'PDF' if pdfs|length == 1 else 'PDFs' }} attached.
+You asked for {{ numbers_pretty }}. {{ 'Here is the link' if papers|length == 1 else 'Here are the links' }}: the arXiv page and the PDF of each one.
 
-{% for p in pdfs %}
+{% for p in papers %}
 {{ "%02d"|format(p.number) }}  {{ p.title }}
-    arxiv.org/abs/{{ p.arxiv_id }}
+    Abstract: https://arxiv.org/abs/{{ p.arxiv_id }}
+    PDF:      https://arxiv.org/pdf/{{ p.arxiv_id }}
 {% endfor %}
 
 Tomorrow at 7 a.m. (your local time) the next edition lands in your inbox.

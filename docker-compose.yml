@@ -81,7 +81,6 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./pdfs:/app/pdfs
     networks: [internal]
     healthcheck:
       test: ["CMD", "test", "-f", "/tmp/alive"]

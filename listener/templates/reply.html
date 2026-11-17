@@ -14,27 +14,29 @@
           <tr>
             <td style="padding:36px 40px 22px 40px;border-bottom:2px solid #1a1a1a;text-align:center;">
               <div style="font-family:Georgia,serif;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#b97f3d;font-weight:bold;">The Daily Abstract</div>
-              <h1 style="font-family:Georgia,serif;font-size:30px;font-weight:700;margin:8px 0 4px 0;letter-spacing:-0.3px;line-height:1.2;">Your papers, attached.</h1>
-              <div style="font-size:12px;color:#888;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">{{ pdfs|length }} {{ 'PDF' if pdfs|length == 1 else 'PDFs' }} &middot; from edition No. {{ issue_num or '—' }}</div>
+              <h1 style="font-family:Georgia,serif;font-size:30px;font-weight:700;margin:8px 0 4px 0;letter-spacing:-0.3px;line-height:1.2;">Your papers.</h1>
+              <div style="font-size:12px;color:#888;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">{{ papers|length }} {{ 'paper' if papers|length == 1 else 'papers' }} &middot; from edition No. {{ issue_num or '—' }}</div>
             </td>
           </tr>
 
           <tr>
             <td style="padding:28px 40px 4px 40px;font-size:15px;line-height:1.65;color:#444;">
-              You asked for {{ numbers_pretty }}. {{ 'Here it is' if pdfs|length == 1 else 'Here they are' }}, attached to this message.
+              You asked for {{ numbers_pretty }}. {{ 'Here is the link' if papers|length == 1 else 'Here are the links' }}: the arXiv page and the PDF of each one.
             </td>
           </tr>
 
           <tr>
             <td style="padding:18px 40px 22px 40px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-              {% for p in pdfs %}
+              {% for p in papers %}
                 <tr>
                   <td style="vertical-align:top;padding:14px 0;border-bottom:{% if not loop.last %}1px solid #e2dccd{% else %}0{% endif %};">
                     <div style="font-family:Georgia,serif;font-size:18px;color:#1a1a1a;font-weight:700;letter-spacing:-0.5px;line-height:1;margin-bottom:6px;">{{ "%02d"|format(p.number) }}</div>
                     <div style="font-family:Georgia,serif;font-size:17px;line-height:1.3;color:#1a1a1a;margin-bottom:4px;font-weight:700;">{{ p.title }}</div>
                     <div style="font-size:12px;color:#888;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">
-                      <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" style="color:#b97f3d;text-decoration:none;">arxiv.org/abs/{{ p.arxiv_id }}</a>
+                      <a href="https://arxiv.org/abs/{{ p.arxiv_id }}" style="color:#b97f3d;text-decoration:none;">https://arxiv.org/abs/{{ p.arxiv_id }}</a>
+                      <span style="color:#ccc;">&middot;</span>
+                      <a href="https://arxiv.org/pdf/{{ p.arxiv_id }}" style="color:#b97f3d;text-decoration:none;">https://arxiv.org/pdf/{{ p.arxiv_id }}</a>
                     </div>
                   </td>
                 </tr>

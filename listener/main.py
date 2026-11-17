@@ -1,19 +1,19 @@
-"""Daemon listener multi-suscriptor.
+"""Multi-subscriber reply listener daemon.
 
-Mapea el sender de cada reply al suscriptor correspondiente; usa el snapshot
-per-usuario del ultimo digest para resolver numeros -> arxiv_ids; responde
-con los PDFs al mismo sender. Mensajes de senders desconocidos se dropean.
+Maps the sender of each reply to its subscriber, resolves the requested
+numbers through that subscriber's last-digest snapshot and replies to the same
+sender with the arXiv links of those papers. Unknown senders are dropped.
 """
 
 import logging
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 from db import init_db, is_processed, mark_processed
 from email_sender import send_reply
-from inbox import create_backend
-from pdf_downloader import download_pdfs
+from inbox import InboxBackend, create_backend
 from reply_parser import parse_reply
 from subscriber_repo import find_by_email, get_last_digest_for
 from tokens import build_manage_url, build_unsubscribe_url
@@ -28,14 +28,36 @@ POLL_INTERVAL_S = int(os.environ.get("POLL_INTERVAL_S", "30"))
 ALIVE_FILE = Path("/tmp/alive")
 
 
-def _process_message(msg: dict, backend) -> None:
+def _select_papers(
+    numbers: list[int], snapshot: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Map reply numbers to snapshot papers, skipping numbers out of range."""
+    out: list[dict[str, Any]] = []
+    for n in numbers:
+        if not (1 <= n <= len(snapshot)):
+            logger.info("PROFILE: number %d out of range (1-%d)", n, len(snapshot))
+            continue
+        p = snapshot[n - 1]
+        out.append({
+            "number": n,
+            "title": p.get("title", ""),
+            "arxiv_id": p.get("arxiv_id", ""),
+        })
+    return out
+
+
+def _finish(msg_id: str, backend: InboxBackend) -> None:
+    mark_processed(msg_id)
+    backend.delete_message(msg_id)
+
+
+def _process_message(msg: dict, backend: InboxBackend) -> None:
     msg_id = msg["id"]
     sender = (msg.get("sender") or "").strip().lower()
     sub = find_by_email(sender) if sender else None
     if not sub:
         logger.info("PROFILE: sender desconocido (%s), drop msg %s", sender, msg_id)
-        mark_processed(msg_id)
-        backend.delete_message(msg_id)
+        _finish(msg_id, backend)
         return
     numbers = parse_reply(msg.get("body", ""))
     if not numbers:
@@ -43,32 +65,40 @@ def _process_message(msg: dict, backend) -> None:
             "PROFILE: reply de sub=%s sin numeros validos, drop msg %s",
             sub.email, msg_id,
         )
-        mark_processed(msg_id)
-        backend.delete_message(msg_id)
+        _finish(msg_id, backend)
         return
-    papers = get_last_digest_for(sub.id)
-    if not papers:
+    snapshot = get_last_digest_for(sub.id)
+    if not snapshot:
         logger.warning(
             "WARN: sub=%s pidio %s pero no tiene snapshot; drop", sub.email, numbers
         )
-        mark_processed(msg_id)
-        backend.delete_message(msg_id)
+        _finish(msg_id, backend)
         return
     logger.info(
         "PROFILE: sub=%s id=%d pidio numeros %s", sub.email, sub.id, numbers
     )
-    pdfs = download_pdfs(numbers, papers)
-    if pdfs:
+    papers = _select_papers(numbers, snapshot)
+    if papers:
         send_reply(
             to_addr=sub.email,
             original_subject=msg.get("subject", ""),
             numbers=numbers,
-            pdfs=pdfs,
+            papers=papers,
             manage_url=build_manage_url(sub.id),
             unsubscribe_url=build_unsubscribe_url(sub.id),
         )
-    mark_processed(msg_id)
-    backend.delete_message(msg_id)
+    _finish(msg_id, backend)
+
+
+def poll_once(backend: InboxBackend) -> None:
+    """Process every unprocessed message currently in the inbox."""
+    for msg in backend.fetch_messages():
+        if is_processed(msg["id"]):
+            continue
+        try:
+            _process_message(msg, backend)
+        except Exception as exc:
+            logger.error("ERROR: procesando msg %s: %s", msg.get("id"), exc)
 
 
 def main() -> None:
@@ -81,15 +111,7 @@ def main() -> None:
     )
     while True:
         try:
-            for msg in backend.fetch_messages():
-                if is_processed(msg["id"]):
-                    continue
-                try:
-                    _process_message(msg, backend)
-                except Exception as exc:
-                    logger.error(
-                        "ERROR: procesando msg %s: %s", msg.get("id"), exc
-                    )
+            poll_once(backend)
         except Exception as exc:
             logger.error("ERROR: loop: %s", exc)
         ALIVE_FILE.touch(exist_ok=True)
