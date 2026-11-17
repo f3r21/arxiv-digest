@@ -1,0 +1,34 @@
+{% extends "_base.html" %}
+{% block title %}Wasn't you? — The Daily Abstract{% endblock %}
+{% block folio_label %}Not me{% endblock %}
+{% block content %}
+
+    <section class="hero" aria-labelledby="hero-title">
+    {% if state == "invalid" %}
+      <p class="eyebrow" style="color: var(--danger);">Invalid link</p>
+      <h1 id="hero-title" class="hero-title">This <em>link</em> doesn't work.</h1>
+      <p class="hero-lead">
+        It may be older than 30 days or damaged in transit. <span class="muted-inline">If someone keeps signing you up, ignore the emails: nothing activates without your confirmation.</span>
+      </p>
+    {% elif state == "done" %}
+      <p class="eyebrow">Done</p>
+      <h1 id="hero-title" class="hero-title">We'll leave you <em>alone</em>.</h1>
+      <p class="hero-lead">
+        The pending signup for this address was cancelled and we won't send it any more confirmation emails. <span class="muted-inline">We keep only a keyed hash of the address to remember this, not the address itself.</span>
+      </p>
+    {% else %}
+      <p class="eyebrow">Wasn't you?</p>
+      <h1 id="hero-title" class="hero-title">Stop these <em>emails</em>.</h1>
+      <p class="hero-lead">
+        Someone asked to subscribe this address to The Daily Abstract. If it wasn't you, confirm below: we'll cancel the pending signup and never send this address another confirmation email.
+      </p>
+
+      <form method="post" action="/not-me" class="btn-row" style="margin-top: var(--space-5);">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="btn primary">It wasn't me — stop the emails</button>
+        <a href="/" class="ghost-link">Back to landing</a>
+      </form>
+    {% endif %}
+    </section>
+
+{% endblock %}

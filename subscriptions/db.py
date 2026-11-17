@@ -4,12 +4,16 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
 DATA_DIR = Path("/app/data")
 DB_PATH = DATA_DIR / "subscribers.db"
+
+# Per-recipient confirmation-email budget (subscription-bombing defense).
+RECIPIENT_MAX_PER_24H = 1
+RECIPIENT_MAX_PER_7D = 3
 
 
 @dataclass(frozen=True)
@@ -19,6 +23,15 @@ class Subscriber:
     categories: list[str]
     keywords: list[str]
     max_papers: int
+
+
+@dataclass(frozen=True)
+class SendDecision:
+    """Outcome of asking the budget for one confirmation email."""
+
+    allowed: bool
+    reason: str
+    send_id: int | None = None
 
 
 @contextmanager
@@ -58,7 +71,6 @@ def init_db() -> None:
                 token_hash TEXT PRIMARY KEY,
                 email      TEXT NOT NULL COLLATE NOCASE,
                 payload    TEXT NOT NULL,
-                ip         TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -85,13 +97,41 @@ def init_db() -> None:
                 total_papers_sent INTEGER NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS subscribe_attempts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ip TEXT,
-                email TEXT,
-                at TEXT DEFAULT CURRENT_TIMESTAMP
+            -- Legacy: stored client IP + raw email and nothing read it.
+            DROP TABLE IF EXISTS subscribe_attempts;
+
+            -- Confirmation emails sent, keyed by HMAC(secret, email) so the
+            -- send budget works without storing raw addresses.
+            CREATE TABLE IF NOT EXISTS confirmation_sends (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipient_hmac TEXT NOT NULL,
+                sent_at        TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_confirmation_sends_recipient
+                ON confirmation_sends(recipient_hmac, sent_at);
+
+            CREATE INDEX IF NOT EXISTS idx_confirmation_sends_sent_at
+                ON confirmation_sends(sent_at);
+
+            -- Recipients who followed "this wasn't me": no more
+            -- confirmation emails. Same HMAC key as confirmation_sends.
+            CREATE TABLE IF NOT EXISTS confirmation_suppressions (
+                recipient_hmac TEXT PRIMARY KEY,
+                created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        _drop_legacy_pending_ip_column(c)
+
+
+def _drop_legacy_pending_ip_column(c: sqlite3.Connection) -> None:
+    """Older schemas kept the client IP on each pending confirmation."""
+    columns = {
+        row["name"]
+        for row in c.execute("PRAGMA table_info(pending_confirmations)")
+    }
+    if "ip" in columns:
+        c.execute("ALTER TABLE pending_confirmations DROP COLUMN ip")
 
 
 def _row_to_subscriber(row: sqlite3.Row) -> Subscriber:
@@ -206,23 +246,51 @@ def update_subscription_for(
         return cur.rowcount > 0
 
 
-def store_pending(
-    token_hash: str, email: str, payload: dict, ip: str | None
-) -> None:
+def store_pending(token_hash: str, email: str, payload: dict) -> None:
     email_norm = email.strip().lower()
     with _conn() as c:
         c.execute(
             """
-            INSERT INTO pending_confirmations (token_hash, email, payload, ip)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO pending_confirmations (token_hash, email, payload)
+            VALUES (?, ?, ?)
             ON CONFLICT(token_hash) DO UPDATE SET
                 email = excluded.email,
                 payload = excluded.payload,
-                ip = excluded.ip,
                 created_at = CURRENT_TIMESTAMP
             """,
-            (token_hash, email_norm, json.dumps(payload), ip),
+            (token_hash, email_norm, json.dumps(payload)),
         )
+
+
+def _sql_utc(moment: datetime) -> str:
+    """UTC timestamp in SQLite's CURRENT_TIMESTAMP format."""
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def prune_expired_pending(ttl_hours: int, now: datetime | None = None) -> int:
+    """Delete pending confirmations older than the token TTL.
+
+    Their tokens no longer verify, so the rows only retain an email.
+    Returns the number of rows deleted.
+    """
+    now = now or datetime.now(timezone.utc)
+    cutoff = _sql_utc(now - timedelta(hours=ttl_hours))
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM pending_confirmations WHERE datetime(created_at) < ?",
+            (cutoff,),
+        )
+        return cur.rowcount
+
+
+def delete_pending_for_email(email: str) -> int:
+    """Drop every pending confirmation for an address; returns rows deleted."""
+    with _conn() as c:
+        cur = c.execute(
+            "DELETE FROM pending_confirmations WHERE email = ?",
+            (email.strip().lower(),),
+        )
+        return cur.rowcount
 
 
 def pop_pending(token_hash: str) -> dict | None:
@@ -243,9 +311,66 @@ def pop_pending(token_hash: str) -> dict | None:
     }
 
 
-def log_subscribe_attempt(ip: str | None, email: str | None) -> None:
+def reserve_confirmation_send(
+    recipient_hmac: str, daily_cap: int, now: datetime | None = None
+) -> SendDecision:
+    """Record one confirmation email if the budget allows it.
+
+    The check and the insert run in one write transaction so concurrent
+    requests cannot both take the last slot.
+    """
+    now = now or datetime.now(timezone.utc)
+    with _conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        # Retention: rows past the widest window (7 days) are not needed.
+        c.execute(
+            "DELETE FROM confirmation_sends WHERE sent_at <= ?",
+            (_sql_utc(now - timedelta(days=7)),),
+        )
+        suppressed = c.execute(
+            "SELECT 1 FROM confirmation_suppressions WHERE recipient_hmac = ?",
+            (recipient_hmac,),
+        ).fetchone()
+        if suppressed:
+            return SendDecision(allowed=False, reason="suppressed")
+        last_24h, last_7d = c.execute(
+            """
+            SELECT COALESCE(SUM(sent_at > ?), 0), COUNT(*)
+            FROM confirmation_sends
+            WHERE recipient_hmac = ?
+            """,
+            (_sql_utc(now - timedelta(hours=24)), recipient_hmac),
+        ).fetchone()
+        if last_24h >= RECIPIENT_MAX_PER_24H:
+            return SendDecision(allowed=False, reason="recipient_24h")
+        if last_7d >= RECIPIENT_MAX_PER_7D:
+            return SendDecision(allowed=False, reason="recipient_7d")
+        utc_midnight = now.astimezone(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sent_today = c.execute(
+            "SELECT COUNT(*) FROM confirmation_sends WHERE sent_at >= ?",
+            (_sql_utc(utc_midnight),),
+        ).fetchone()[0]
+        if sent_today >= daily_cap:
+            return SendDecision(allowed=False, reason="global_daily_cap")
+        cur = c.execute(
+            "INSERT INTO confirmation_sends (recipient_hmac, sent_at) VALUES (?, ?)",
+            (recipient_hmac, _sql_utc(now)),
+        )
+        return SendDecision(allowed=True, reason="ok", send_id=int(cur.lastrowid))
+
+
+def suppress_confirmations(recipient_hmac: str) -> None:
+    """Stop all future confirmation emails to this recipient."""
     with _conn() as c:
         c.execute(
-            "INSERT INTO subscribe_attempts (ip, email) VALUES (?, ?)",
-            (ip or "", (email or "").strip().lower() or None),
+            "INSERT OR IGNORE INTO confirmation_suppressions (recipient_hmac) VALUES (?)",
+            (recipient_hmac,),
         )
+
+
+def release_confirmation_send(send_id: int) -> None:
+    """Undo a reservation whose email could not be sent."""
+    with _conn() as c:
+        c.execute("DELETE FROM confirmation_sends WHERE id = ?", (send_id,))

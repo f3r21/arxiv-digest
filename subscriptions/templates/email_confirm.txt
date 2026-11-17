@@ -24,4 +24,7 @@ What you'll get:
     back as attachments, in about thirty seconds
 
 If this wasn't you, ignore this email — the subscription won't
-activate without confirmation.
+activate without confirmation. To stop further confirmation
+emails to this address, open:
+
+  {{ not_me_url }}

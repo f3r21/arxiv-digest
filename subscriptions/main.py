@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, AsyncIterator
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -28,14 +28,20 @@ import db
 import email_outbound
 import tokens
 
+# Each message carries its own tag (INIT:, RESULT:, WARN:, ...).
+LOG_FORMAT = "%(asctime)s %(name)s %(message)s"
+
 logger = logging.getLogger("subscriptions")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s INIT: %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 SUBSCRIBE_RATE_PER_HOUR = int(os.environ.get("SUBSCRIBE_RATE_PER_HOUR", "5"))
+# Per-IP daily limit, so a single source cannot drain CONFIRM_DAILY_CAP with
+# a stream of fresh addresses that the per-recipient caps never see.
+SUBSCRIBE_RATE_PER_DAY = int(os.environ.get("SUBSCRIBE_RATE_PER_DAY", "5"))
+# Confirmation emails per UTC day across all recipients. Resend's free tier
+# allows 100 emails/day shared with the digest, so keep this well below it.
+CONFIRM_DAILY_CAP = int(os.environ.get("CONFIRM_DAILY_CAP", "20"))
 DISPOSABLE_BLOCKLIST = {
     d.strip().lower()
     for d in os.environ.get("DISPOSABLE_DOMAIN_BLOCKLIST", "").split(",")
@@ -58,6 +64,8 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup: init DB, catalog, seed; shutdown: nada que cerrar."""
     db.init_db()
+    pruned = db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
+    logger.info("INIT: pruned %d expired pending confirmations", pruned)
     cats.load()
     seed_from_env()
     logger.info("INIT: subscriptions arrancado; base_url=%s", PUBLIC_BASE_URL)
@@ -171,6 +179,7 @@ def robots_txt() -> str:
         "Disallow: /confirm\n"
         "Disallow: /manage\n"
         "Disallow: /unsubscribe\n"
+        "Disallow: /not-me\n"
         "Disallow: /admin/\n"
         "Disallow: /health\n"
         "Disallow: /categories.json\n"
@@ -312,18 +321,40 @@ def _validate_email_or_400(raw_email: str) -> str:
     return normalized
 
 
+def _send_confirmation_email(
+    email_norm: str, payload: dict, categories: list[str], send_id: int
+) -> None:
+    """Background half of /subscribe: store the pending row and send the email.
+
+    Runs after the response has gone out, so SMTP latency or failure never
+    shows in the response. On failure the budget slot is given back so the
+    visitor can retry.
+    """
+    try:
+        token = tokens.make_confirm_token(email_norm)
+        db.store_pending(tokens.hash_token(token), email_norm, payload)
+        email_outbound.send_confirmation(email_norm, token, categories)
+    except Exception as exc:
+        db.release_confirmation_send(send_id)
+        logger.error("ERROR: confirmation email send failed: %s", exc)
+
+
+def _subscribe_rate_limits() -> str:
+    """Per-IP limits for POST /subscribe, read on each request."""
+    return f"{SUBSCRIBE_RATE_PER_HOUR}/hour;{SUBSCRIBE_RATE_PER_DAY}/day"
+
+
 @app.post("/subscribe")
-@limiter.limit(f"{SUBSCRIBE_RATE_PER_HOUR}/hour")
+@limiter.limit(_subscribe_rate_limits)
 async def subscribe(
     request: Request,
+    background_tasks: BackgroundTasks,
     email: Annotated[str, Form()],
     categories: Annotated[list[str], Form()] = [],
     keywords: Annotated[str, Form()] = "",
     max_papers: Annotated[int, Form()] = 15,
 ) -> JSONResponse:
-    ip = get_remote_address(request)
     email_norm = _validate_email_or_400(email)
-    db.log_subscribe_attempt(ip, email_norm)
 
     valid_cats = cats.validate_codes(categories)
     if not valid_cats:
@@ -341,14 +372,21 @@ async def subscribe(
         "keywords": kws,
         "max_papers": max_p,
     }
-    token = tokens.make_confirm_token(email_norm)
-    db.store_pending(tokens.hash_token(token), email_norm, payload, ip)
-
-    try:
-        email_outbound.send_confirmation(email_norm, token, valid_cats)
-    except Exception as exc:
-        logger.error("ERROR: confirm email fallo para %s: %s", email_norm, exc)
-        raise HTTPException(status_code=502, detail="no se pudo enviar el email")
+    # Blocked and allowed requests do the same work before responding (prune,
+    # reserve) and return the same body; the send itself happens after the
+    # response. Neither the body nor the latency reveals a capped or
+    # suppressed address.
+    db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
+    decision = db.reserve_confirmation_send(
+        tokens.email_hmac(email_norm), daily_cap=CONFIRM_DAILY_CAP
+    )
+    if decision.allowed:
+        background_tasks.add_task(
+            _send_confirmation_email, email_norm, payload, valid_cats, decision.send_id
+        )
+    else:
+        # The log omits the address on purpose.
+        logger.warning("WARN: confirmation email skipped; reason=%s", decision.reason)
 
     return JSONResponse(
         {"status": "pending_confirmation", "email": email_norm},
@@ -392,6 +430,36 @@ def confirm(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
             subscriber=subscriber,
             manage_url=manage_url,
         ),
+    )
+
+
+# === "This wasn't me" (link in the confirmation email) ===
+
+
+@app.get("/not-me", response_class=HTMLResponse)
+def not_me_get(request: Request, token: Annotated[str, Query()]) -> HTMLResponse:
+    """Ask before acting: mail scanners prefetch GET links."""
+    if tokens.read_not_me_token(token) is None:
+        return templates.TemplateResponse(
+            request, "not_me.html", _common_ctx(request, state="invalid"), status_code=400
+        )
+    return templates.TemplateResponse(
+        request, "not_me.html", _common_ctx(request, state="ask", token=token)
+    )
+
+
+@app.post("/not-me", response_class=HTMLResponse)
+def not_me_post(request: Request, token: Annotated[str, Form()]) -> HTMLResponse:
+    email = tokens.read_not_me_token(token)
+    if email is None:
+        return templates.TemplateResponse(
+            request, "not_me.html", _common_ctx(request, state="invalid"), status_code=400
+        )
+    db.suppress_confirmations(tokens.email_hmac(email))
+    cancelled = db.delete_pending_for_email(email)
+    logger.info("RESULT: not-me suppression stored; pending cancelled=%d", cancelled)
+    return templates.TemplateResponse(
+        request, "not_me.html", _common_ctx(request, state="done")
     )
 
 

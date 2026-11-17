@@ -239,6 +239,43 @@ openssl rand -hex 32
 # pegá el output como SUBSCRIPTIONS_SECRET
 ```
 
+### Anti-abuso del formulario (opcional, hay defaults)
+
+| Variable | Default | Qué hace |
+|---|---|---|
+| `SUBSCRIBE_RATE_PER_HOUR` | `5` | POST `/subscribe` por IP real del visitante y por hora (slowapi, en memoria). |
+| `SUBSCRIBE_RATE_PER_DAY` | `5` | POST `/subscribe` por IP real del visitante y por día. Impide que una sola IP agote `CONFIRM_DAILY_CAP` con direcciones nuevas (los topes por destinatario no la frenan). Si es menor que el límite por hora, manda este. |
+| `CONFIRM_DAILY_CAP` | `20` | Emails de confirmación por día UTC (reset 00:00 UTC) sumando todos los destinatarios. Resend free da 100/día compartidos con el digest: dejá margen para `suscriptores + respuestas PDF`. |
+| `CONFIRM_TTL_HOURS` | `48` | Validez del link de confirmación. Las altas pendientes más viejas se borran al arrancar y en cada alta nueva. |
+| `FORWARDED_ALLOW_IPS` | `*` (en la imagen) | IPs de proxy de las que uvicorn acepta `X-Forwarded-For`. `*` es seguro porque el puerto 8000 no se publica y Caddy reescribe el header. Si alguna vez publicás 8000, poné el CIDR de la red `internal` (`docker network inspect arxiv-digest_internal`). |
+
+Además, sin variables: cada dirección recibe como máximo 1 confirmación cada
+24 h y 3 cada 7 días. El conteo se guarda como
+HMAC-SHA256(`SUBSCRIPTIONS_SECRET`, email) en `confirmation_sends` (7 días de
+retención), sin el email en claro ni IPs. Cuando un tope bloquea, `/subscribe`
+responde igual que si hubiera enviado y loguea
+`WARN: confirmation email skipped; reason=...` (`recipient_24h`,
+`recipient_7d`, `global_daily_cap` o `suppressed`) sin la dirección.
+
+`/subscribe` responde 202 antes de enviar: el email sale en segundo plano,
+así que ni el cuerpo ni la latencia delatan una dirección bloqueada. Si el
+SMTP falla, el visitante igual ve "revisá tu email"; el servicio loguea
+`ERROR: confirmation email send failed: ...` (sin la dirección) y libera el
+cupo para que pueda reintentar.
+
+El email de confirmación trae un link "Not you?" (`/not-me`). Al confirmarlo,
+se borran las altas pendientes de esa dirección y su HMAC queda en
+`confirmation_suppressions`: no recibe más confirmaciones. Para revertirlo a
+pedido de la persona:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec subscriptions \
+  python -c "import sqlite3, tokens; c = sqlite3.connect('/app/data/subscribers.db'); c.execute('DELETE FROM confirmation_suppressions WHERE recipient_hmac = ?', (tokens.email_hmac('persona@ejemplo.com'),)); c.commit()"
+```
+
+Cambiar `SUBSCRIPTIONS_SECRET` invalida los links y también vacía en la
+práctica los topes por destinatario y las supresiones (el HMAC cambia).
+
 ---
 
 ## 7. Deploy! (~3 min)
@@ -336,6 +373,17 @@ en Oracle Security List o iptables, dominio con typo en `.env.prod`.
 - Verificar que el dominio está `Verified` en Resend dashboard.
 - Verificar que `FROM_ADDR=digest@TU-DOMINIO` (no el sandbox `onboarding@resend.dev`).
 - Plan free: 100/día — chequear cuota.
+
+**No llega el email de confirmación.**
+```bash
+docker compose -f docker-compose.prod.yml logs subscriptions | grep -E "confirmation email (skipped|send failed)"
+```
+`send failed` es un error de SMTP (ver "Resend rechaza emails").
+`reason=global_daily_cap` significa que se agotó `CONFIRM_DAILY_CAP` del día
+UTC; si aparece temprano en el día UTC, sospechá de una fuente que manda
+altas en ráfaga y bajá `SUBSCRIBE_RATE_PER_DAY`. `recipient_24h`/`recipient_7d`
+significa que esa dirección ya recibió su cupo; `suppressed`, que alguien
+usó el link "Not you?" (ver arriba cómo revertirlo).
 
 **Mailsac no recibe replies.**
 - Verificar que `REPLY_TO=tu-inbox@mailsac.com` matchea el inbox creado.

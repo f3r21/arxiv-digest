@@ -59,7 +59,7 @@ def test_resubscribe_after_unsubscribe_reactivates():
 
 
 def test_pending_confirmation_roundtrip():
-    db.store_pending("hash1", "a@b.com", {"categories": ["cs.DC"]}, "1.2.3.4")
+    db.store_pending("hash1", "a@b.com", {"categories": ["cs.DC"]})
     popped = db.pop_pending("hash1")
     assert popped is not None
     assert popped["email"] == "a@b.com"
@@ -70,9 +70,3 @@ def test_pending_confirmation_roundtrip():
 
 def test_pop_missing_pending_returns_none():
     assert db.pop_pending("nope") is None
-
-
-def test_log_attempts():
-    db.log_subscribe_attempt("1.2.3.4", "spam@x.com")
-    db.log_subscribe_attempt("5.6.7.8", None)
-    # No raises = ok
