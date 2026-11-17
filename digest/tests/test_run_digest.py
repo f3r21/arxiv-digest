@@ -260,6 +260,41 @@ def test_papers_older_than_seen_retention_are_never_sent(env):
     assert ids == ["2611.00002"]
 
 
+def test_catch_up_runs_once_when_started_after_the_hour(env, monkeypatch):
+    add_subscriber(env, "ok@example.com")
+    monkeypatch.setattr(main, "DIGEST_HOUR", "00:00")
+
+    assert main.catch_up_if_missed() is True
+    assert len(FakeSMTP.sent) == 1
+
+    # A second restart the same day finds today's issue and does nothing.
+    assert main.catch_up_if_missed() is False
+    assert len(FakeSMTP.sent) == 1
+
+
+def test_catch_up_runs_when_only_yesterdays_issue_exists(env, monkeypatch):
+    add_subscriber(env, "ok@example.com")
+    monkeypatch.setattr(main, "DIGEST_HOUR", "00:00")
+    with sqlite3.connect(env["tmp"] / "subscribers.db") as c:
+        c.execute(
+            "INSERT INTO digest_issues (sent_at, subscriber_count, total_papers_sent) "
+            "VALUES (datetime('now', '-1 day'), 1, 2)"
+        )
+
+    assert main.catch_up_if_missed() is True
+    assert len(FakeSMTP.sent) == 1
+
+
+def test_catch_up_does_nothing_before_the_hour(env, monkeypatch):
+    add_subscriber(env, "ok@example.com")
+    monkeypatch.setattr(main, "DIGEST_HOUR", "07:00")
+    lima = timezone(timedelta(hours=-5))
+    six_am = datetime(2026, 11, 17, 6, 0, tzinfo=lima)
+
+    assert main.catch_up_if_missed(now=six_am) is False
+    assert FakeSMTP.sent == []
+
+
 def test_empty_arxiv_pings_fail_and_sends_nothing(env):
     add_subscriber(env, "ok@example.com")
     env["fetched"]["papers"] = []

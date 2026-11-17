@@ -11,6 +11,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -145,6 +146,21 @@ def prune_seen_older_than(days: int) -> int:
             (f"-{int(days)} days",),
         )
         return int(cur.rowcount)
+
+
+def issue_started_since(since_utc: datetime) -> bool:
+    """True if a digest issue was reserved at or after `since_utc`.
+
+    digest_issues.sent_at is SQLite CURRENT_TIMESTAMP: UTC text in
+    'YYYY-MM-DD HH:MM:SS', which compares correctly as a string.
+    """
+    threshold = since_utc.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    with _conn() as c:
+        row = c.execute(
+            "SELECT 1 FROM digest_issues WHERE sent_at >= ? LIMIT 1",
+            (threshold,),
+        ).fetchone()
+    return row is not None
 
 
 def next_issue_number() -> int:

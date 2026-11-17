@@ -23,6 +23,7 @@ from subscriber_repo import (
     finalize_issue,
     get_unseen_for,
     init_state_tables,
+    issue_started_since,
     list_active_subscribers,
     next_issue_number,
     prune_seen_older_than,
@@ -307,6 +308,31 @@ def run_digest() -> None:
         _ping_healthcheck("ok", body=summary)
 
 
+def catch_up_if_missed(now: datetime | None = None) -> bool:
+    """Run today's digest if its scheduled time has passed and it has not run.
+
+    `schedule` keeps no state, so a container (re)started after DIGEST_HOUR
+    would otherwise skip the day. "Has run" means an issue was reserved at
+    or after today's DIGEST_HOUR in local time (TZ env). Returns True if it
+    ran the digest.
+    """
+    now = now or datetime.now()
+    if now.tzinfo is None:
+        now = now.astimezone()  # naive means local time (TZ env)
+    hour, minute = (int(x) for x in DIGEST_HOUR.split(":")[:2])
+    scheduled = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if now < scheduled:
+        return False
+    if issue_started_since(scheduled):
+        return False
+    logger.info(
+        "INIT: started after %s and no digest since; running catch-up",
+        DIGEST_HOUR,
+    )
+    run_digest()
+    return True
+
+
 def main() -> None:
     init_state_tables()
     ALIVE_FILE.touch(exist_ok=True)
@@ -316,6 +342,10 @@ def main() -> None:
             run_digest()
         except Exception as exc:
             logger.error("ERROR: RUN_NOW digest fallo: %s", exc)
+    try:
+        catch_up_if_missed()
+    except Exception as exc:
+        logger.error("ERROR: catch-up digest failed: %s", exc)
     schedule.every().day.at(DIGEST_HOUR).do(run_digest)
     logger.info("INIT: scheduler arrancado, proximo digest a las %s", DIGEST_HOUR)
     while True:
