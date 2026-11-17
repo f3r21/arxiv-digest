@@ -249,7 +249,9 @@ def test_subscribe_stops_sending_at_the_global_daily_cap(client, monkeypatch):
     assert [m["to"] for m in sent] == ["user0@example.com", "user1@example.com"]
 
 
-def test_failed_send_does_not_use_up_the_recipient_budget(client, monkeypatch):
+def test_failed_send_looks_like_success_and_frees_the_budget(
+    client, monkeypatch, caplog
+):
     c, sent = client
 
     def broken_send(to_addr, token, categories):
@@ -257,7 +259,11 @@ def test_failed_send_does_not_use_up_the_recipient_budget(client, monkeypatch):
 
     monkeypatch.setattr(main.email_outbound, "send_confirmation", broken_send)
     r = c.post("/subscribe", data={"email": "retry@example.com", **FORM})
-    assert r.status_code == 502
+    # The response cannot depend on SMTP: it is sent before the email is.
+    assert r.status_code == 202
+    errors = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert any(m.startswith("ERROR:") for m in errors)
+    assert not any("retry@example.com" in m for m in caplog.messages)
 
     monkeypatch.setattr(
         main.email_outbound,
@@ -267,6 +273,56 @@ def test_failed_send_does_not_use_up_the_recipient_budget(client, monkeypatch):
     r = c.post("/subscribe", data={"email": "retry@example.com", **FORM})
     assert r.status_code == 202
     assert sent == [{"to": "retry@example.com"}]
+
+
+def test_subscribe_responds_before_sending_the_email(monkeypatch):
+    """Response time must not reveal whether an email goes out.
+
+    A blocked request sends nothing, so an allowed one has to answer before
+    the SMTP round-trip starts, or the latency gap would tell a prober that
+    an address is capped or suppressed.
+    """
+    import asyncio
+    from urllib.parse import urlencode
+
+    events: list[str] = []
+    monkeypatch.setattr(
+        main.email_outbound,
+        "send_confirmation",
+        lambda to_addr, token, categories: events.append("smtp"),
+    )
+    body = urlencode({"email": "order@example.com", "categories": "cs.DC"}).encode()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/subscribe",
+        "raw_path": b"/subscribe",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [
+            (b"host", b"testserver"),
+            (b"content-type", b"application/x-www-form-urlencoded"),
+            (b"content-length", str(len(body)).encode()),
+        ],
+        "client": ("192.0.2.10", 50000),
+        "server": ("testserver", 80),
+    }
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            events.append(f"status {message['status']}")
+        elif message["type"] == "http.response.body" and not message.get("more_body"):
+            events.append("response complete")
+
+    asyncio.run(main.app(scope, receive, send))
+
+    assert events == ["status 202", "response complete", "smtp"]
 
 
 # === "This wasn't me" link ===

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, AsyncIterator
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -318,10 +318,29 @@ def _validate_email_or_400(raw_email: str) -> str:
     return normalized
 
 
+def _send_confirmation_email(
+    email_norm: str, payload: dict, categories: list[str], send_id: int
+) -> None:
+    """Background half of /subscribe: store the pending row and send the email.
+
+    Runs after the response has gone out, so SMTP latency or failure never
+    shows in the response. On failure the budget slot is given back so the
+    visitor can retry.
+    """
+    try:
+        token = tokens.make_confirm_token(email_norm)
+        db.store_pending(tokens.hash_token(token), email_norm, payload)
+        email_outbound.send_confirmation(email_norm, token, categories)
+    except Exception as exc:
+        db.release_confirmation_send(send_id)
+        logger.error("ERROR: confirmation email send failed: %s", exc)
+
+
 @app.post("/subscribe")
 @limiter.limit(f"{SUBSCRIBE_RATE_PER_HOUR}/hour")
 async def subscribe(
     request: Request,
+    background_tasks: BackgroundTasks,
     email: Annotated[str, Form()],
     categories: Annotated[list[str], Form()] = [],
     keywords: Annotated[str, Form()] = "",
@@ -345,31 +364,26 @@ async def subscribe(
         "keywords": kws,
         "max_papers": max_p,
     }
-    accepted = JSONResponse(
-        {"status": "pending_confirmation", "email": email_norm},
-        status_code=202,
-    )
+    # Blocked and allowed requests do the same work before responding (prune,
+    # reserve) and return the same body; the send itself happens after the
+    # response. Neither the body nor the latency reveals a capped or
+    # suppressed address.
+    db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
     decision = db.reserve_confirmation_send(
         tokens.email_hmac(email_norm), daily_cap=CONFIRM_DAILY_CAP
     )
-    if not decision.allowed:
-        # Same response as a real send: the caller must not learn whether
-        # this address is capped. The log omits the address on purpose.
+    if decision.allowed:
+        background_tasks.add_task(
+            _send_confirmation_email, email_norm, payload, valid_cats, decision.send_id
+        )
+    else:
+        # The log omits the address on purpose.
         logger.warning("WARN: confirmation email skipped; reason=%s", decision.reason)
-        return accepted
 
-    token = tokens.make_confirm_token(email_norm)
-    db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
-    db.store_pending(tokens.hash_token(token), email_norm, payload)
-
-    try:
-        email_outbound.send_confirmation(email_norm, token, valid_cats)
-    except Exception as exc:
-        db.release_confirmation_send(decision.send_id)
-        logger.error("ERROR: confirm email fallo para %s: %s", email_norm, exc)
-        raise HTTPException(status_code=502, detail="no se pudo enviar el email")
-
-    return accepted
+    return JSONResponse(
+        {"status": "pending_confirmation", "email": email_norm},
+        status_code=202,
+    )
 
 
 @app.get("/confirm", response_class=HTMLResponse)
