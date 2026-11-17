@@ -36,6 +36,9 @@ logging.basicConfig(
 
 PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 SUBSCRIBE_RATE_PER_HOUR = int(os.environ.get("SUBSCRIBE_RATE_PER_HOUR", "5"))
+# Confirmation emails per UTC day across all recipients. Resend's free tier
+# allows 100 emails/day shared with the digest, so keep this well below it.
+CONFIRM_DAILY_CAP = int(os.environ.get("CONFIRM_DAILY_CAP", "20"))
 DISPOSABLE_BLOCKLIST = {
     d.strip().lower()
     for d in os.environ.get("DISPOSABLE_DOMAIN_BLOCKLIST", "").split(",")
@@ -341,6 +344,19 @@ async def subscribe(
         "keywords": kws,
         "max_papers": max_p,
     }
+    accepted = JSONResponse(
+        {"status": "pending_confirmation", "email": email_norm},
+        status_code=202,
+    )
+    decision = db.reserve_confirmation_send(
+        tokens.email_hmac(email_norm), daily_cap=CONFIRM_DAILY_CAP
+    )
+    if not decision.allowed:
+        # Same response as a real send: the caller must not learn whether
+        # this address is capped. The log omits the address on purpose.
+        logger.warning("WARN: confirmation email skipped; reason=%s", decision.reason)
+        return accepted
+
     token = tokens.make_confirm_token(email_norm)
     db.prune_expired_pending(tokens.CONFIRM_TTL_HOURS)
     db.store_pending(tokens.hash_token(token), email_norm, payload)
@@ -348,13 +364,11 @@ async def subscribe(
     try:
         email_outbound.send_confirmation(email_norm, token, valid_cats)
     except Exception as exc:
+        db.release_confirmation_send(decision.send_id)
         logger.error("ERROR: confirm email fallo para %s: %s", email_norm, exc)
         raise HTTPException(status_code=502, detail="no se pudo enviar el email")
 
-    return JSONResponse(
-        {"status": "pending_confirmation", "email": email_norm},
-        status_code=202,
-    )
+    return accepted
 
 
 @app.get("/confirm", response_class=HTMLResponse)

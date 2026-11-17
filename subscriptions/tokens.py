@@ -1,6 +1,7 @@
 """Tokens firmados con itsdangerous (confirm 48h, unsubscribe sin TTL)."""
 
 import hashlib
+import hmac
 import os
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -22,6 +23,12 @@ def make_confirm_token(email: str) -> str:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def email_hmac(email: str) -> str:
+    """HMAC-SHA256(secret, normalized email): a stable key that is not the address."""
+    normalized = email.strip().lower().encode("utf-8")
+    return hmac.new(SECRET.encode("utf-8"), normalized, hashlib.sha256).hexdigest()
 
 
 def read_confirm_token(token: str) -> str | None:

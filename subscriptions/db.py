@@ -11,6 +11,10 @@ from typing import Iterator
 DATA_DIR = Path("/app/data")
 DB_PATH = DATA_DIR / "subscribers.db"
 
+# Per-recipient confirmation-email budget (subscription-bombing defense).
+RECIPIENT_MAX_PER_24H = 1
+RECIPIENT_MAX_PER_7D = 3
+
 
 @dataclass(frozen=True)
 class Subscriber:
@@ -19,6 +23,15 @@ class Subscriber:
     categories: list[str]
     keywords: list[str]
     max_papers: int
+
+
+@dataclass(frozen=True)
+class SendDecision:
+    """Outcome of asking the budget for one confirmation email."""
+
+    allowed: bool
+    reason: str
+    send_id: int | None = None
 
 
 @contextmanager
@@ -86,6 +99,20 @@ def init_db() -> None:
 
             -- Legacy: stored client IP + raw email and nothing read it.
             DROP TABLE IF EXISTS subscribe_attempts;
+
+            -- Confirmation emails sent, keyed by HMAC(secret, email) so the
+            -- send budget works without storing raw addresses.
+            CREATE TABLE IF NOT EXISTS confirmation_sends (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                recipient_hmac TEXT NOT NULL,
+                sent_at        TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_confirmation_sends_recipient
+                ON confirmation_sends(recipient_hmac, sent_at);
+
+            CREATE INDEX IF NOT EXISTS idx_confirmation_sends_sent_at
+                ON confirmation_sends(sent_at);
         """)
         _drop_legacy_pending_ip_column(c)
 
@@ -265,4 +292,54 @@ def pop_pending(token_hash: str) -> dict | None:
         "email": str(row["email"]),
         "payload": dict(json.loads(row["payload"])),
     }
+
+
+def reserve_confirmation_send(
+    recipient_hmac: str, daily_cap: int, now: datetime | None = None
+) -> SendDecision:
+    """Record one confirmation email if the budget allows it.
+
+    The check and the insert run in one write transaction so concurrent
+    requests cannot both take the last slot.
+    """
+    now = now or datetime.now(timezone.utc)
+    with _conn() as c:
+        c.execute("BEGIN IMMEDIATE")
+        # Retention: rows past the widest window (7 days) are not needed.
+        c.execute(
+            "DELETE FROM confirmation_sends WHERE sent_at <= ?",
+            (_sql_utc(now - timedelta(days=7)),),
+        )
+        last_24h, last_7d = c.execute(
+            """
+            SELECT COALESCE(SUM(sent_at > ?), 0), COUNT(*)
+            FROM confirmation_sends
+            WHERE recipient_hmac = ?
+            """,
+            (_sql_utc(now - timedelta(hours=24)), recipient_hmac),
+        ).fetchone()
+        if last_24h >= RECIPIENT_MAX_PER_24H:
+            return SendDecision(allowed=False, reason="recipient_24h")
+        if last_7d >= RECIPIENT_MAX_PER_7D:
+            return SendDecision(allowed=False, reason="recipient_7d")
+        utc_midnight = now.astimezone(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        sent_today = c.execute(
+            "SELECT COUNT(*) FROM confirmation_sends WHERE sent_at >= ?",
+            (_sql_utc(utc_midnight),),
+        ).fetchone()[0]
+        if sent_today >= daily_cap:
+            return SendDecision(allowed=False, reason="global_daily_cap")
+        cur = c.execute(
+            "INSERT INTO confirmation_sends (recipient_hmac, sent_at) VALUES (?, ?)",
+            (recipient_hmac, _sql_utc(now)),
+        )
+        return SendDecision(allowed=True, reason="ok", send_id=int(cur.lastrowid))
+
+
+def release_confirmation_send(send_id: int) -> None:
+    """Undo a reservation whose email could not be sent."""
+    with _conn() as c:
+        c.execute("DELETE FROM confirmation_sends WHERE id = ?", (send_id,))
 
